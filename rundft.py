@@ -25,16 +25,17 @@ def si_pyscf_test():
 
   pwriter=PySCFPBCWriter({
       'gmesh':[16,16,16],
-      'cif':open('si.cif','r').read()
+      'cif':open('si.cif','r').read(),
+      'supercell':[[-1,-1,1],[-1,1,-1],[1,-1,-1]]
     })
   pman=PySCFManager(
       name='scf',
-      path='sipyscf',
+      path='test_sipyscf',
       writer=pwriter,
       runner=PySCFRunnerPBS(
           queue='secondary',
           nn=1,
-          #np=16,
+          np=16,
           walltime='4:00:00'
         )
     )
