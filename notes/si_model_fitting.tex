@@ -94,6 +94,27 @@ Differentiating the model (Eq \ref{eq:2orb_model}) with respect to the determina
 
 We compute this derivative and include the additional equations in the model fitting (note that the constant shift $\epsilon_0$ doesn't appear in the derivative equation).
 
+\begin{figure}[h]
+\begin{tikzpicture}[const/.style={rectangle, minimum height=1cm, inner sep=.5mm},
+                    occ/.style={rectangle, minimum height=1cm, minimum width=2.5cm},
+                    en/.style={rectangle, minimum height=1cm, minimum width=1.2cm}]
+\node (1) [const, fill=orange] {1};
+\node (01) [const, below=0mm of 1.south east, anchor=north east, fill=orange!60!yellow] {0};
+\node (02) [const, below=0mm of 01.south east, anchor=north east, fill=orange!30!yellow] {0};
+\node (n) [occ, right=0mm of 1.south east, anchor=south west, fill=red!70!blue] {$\ldots n_i \ldots$};
+\node (n1) [occ, right=0mm of 01.south east, anchor=south west, fill=blue!60!orange] {$\ldots \partial_{p_1} n_i \ldots$};
+\node (n2) [occ, right=0mm of 02.south east, anchor=south west, fill=blue!50!orange] {$\ldots \partial_{p_2} n_i \ldots$};
+\node (param0) [rectangle, below right=2mm of n.north east, anchor=north west, fill=brown!100!red, minimum width=4mm, inner sep=.5mm] {$\epsilon_0$};
+\node (params) [rectangle, below=0mm of param0, anchor=north, fill=brown!80!black, minimum height=2.5cm, minimum width=4mm, inner sep=.5mm] 
+{$\begin{matrix} \vdots\\ \epsilon_i\\ \vdots \end{matrix}$};
+\node (=) [right=3mm of params] {$=$};
+\node (E) [en, right=15mm of n.north east, anchor=north west, fill=green!80!black] {$E$};
+\node (E1) [en, below=0mm of E.south, anchor=north, fill=green!60!blue] {$\partial_{p_1} E$};
+\node (E2) [en, below=0mm of E1.south, anchor=north, fill=green!50!blue] {$\partial_{p_2} E$};
+\end{tikzpicture}
+\end{figure}
+
+
 \begin{figure}
 \includegraphics[width=0.5\textwidth]{images/vmc_allderivs_2orb_model.png}
 \includegraphics[width=0.5\textwidth]{images/dmc_allderivs_2orb_model.png}
@@ -119,16 +140,71 @@ DMC & -31.281 & 0.0500
 Including more states and more derivatives allows us to use better statistics and fit more complicated models.
 To describe the low energy degrees of freedom, we choose determinants corresponding to low energy mean-field excitations.
 
-\begin{figure}
+\subsection{Choosing excitations}
+
+\begin{figure}[h!]
 \includegraphics[width=0.5\textwidth]{images/determinant_mf_energies.png}
 \label{fig:energy_cutoff}
 \caption{Mean-field DFT energies for singles and doubles excitations.
 The dashed line shows the cutoff chosen for the samples used in this calculation.}
 \end{figure}
 
-To fit a meaningful model, it is ideal to choose states below an energy gap so that the states are well described by the low energy subspace of the Hilbert space.
-(If there is no gap, the states may have components not included in the low energy space, introducing variance that is not relevant to the model.)
+To fit a ``low energy'' model, it is ideal to choose states below an energy gap so that the states are well described by the low energy subspace of the Hilbert space.
+(If there is no gap, the states may have components not included in the low energy space, introducing energy variance that is not relevant to the model.)
 We choose an energy cutoff in the gap shown in Fig \ref{fig:energy_cutoff}, which only includes singles excitations.
+
+\subsection{Wave function samples}
+
+As with the model above, the model we are fitting here assigns new energies to the molecular orbitals,
+
+\begin{equation}
+E = \epsilon_0 + \sum_i \epsilon_i n_i,
+\end{equation}
+
+where $i$ indexes a set of molecular orbitals.
+In this set of samples, a total of 12 orbitals have varying occupation (three valence, nine conduction, Fig \ref{fig:descriptors}).
+Since the total number of electrons is constant, there are only 11 degrees of freedom in the orbital occupations.
+
+\begin{figure}[h!]
+\includegraphics[width=0.5\textwidth]{images/vmc_lowen_descriptors.png}
+\includegraphics[width=0.5\textwidth]{images/vmc_allderivs_lowen_corrmat.png}
+\label{fig:descriptors}
+\caption{Left: Occupation of orbitals for different samples. Right: The correlation matrix (VMC) of the energies and orbital occupations, including derivatives.}
+\end{figure}
+
+The correlation matrix of the descriptors shows how the energy is correlated with the orbital occupations (Fig \ref{fig:descriptors}).
+The correlation samples include both the values and derivatives of the energies and occupations.
+Since there is a constant term in the model, the mean of the energies was subtracted off (but not of the derivatives).
+As we should expect, the energy is negatively correlated with the valence occupations, and positively correlated with the conduction occupations.
+
+Unfortunately, this trend is not present without the derivatives
+\begin{figure}[h!]
+\includegraphics[width=0.5\textwidth]{images/vmc_lowen_corrmat.png}
+\label{fig:descriptors_noderivs}
+\caption{The correlation matrix (VMC) of the energies and orbital occupations (not including derivatives).}
+\end{figure}
+
+\subsection{Fitting a model}
+
+Two models are fit: one using only the energies and occupations, the other also using the derivatives.
+There seems to be an issue with the energies, but the derivatives seem to fit well.
+
+\begin{figure}[h!]
+\includegraphics[width=0.5\textwidth]{images/vmc_lowen_model.png}
+\includegraphics[width=0.5\textwidth]{images/vmc_lowen_model_bands.png}
+\label{fig:model_fit_noderivs}
+\caption{Model fit without derivatives. Left: Plot of data vs model prediction. Right: The orbital energies of the model.}
+\end{figure}
+
+\begin{figure}[h!]
+\includegraphics[width=0.5\textwidth]{images/vmc_allderivs_lowen_model.png}
+\includegraphics[width=0.5\textwidth]{images/vmc_allderivs_lowen_model_bands.png}
+\label{fig:model_fit}
+\caption{Model fit with derivatives. Left: Plot of data vs model prediction. Right: The orbital energies of the model.}
+\end{figure}
+
+  
+  
 
 
 
