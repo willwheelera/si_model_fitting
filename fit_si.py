@@ -1,6 +1,7 @@
 import numpy as np
 import json
 import sys
+import pandas as pd
 # Given the QMC data, fit on-site energies to Si (Gamma point) orbitals
 
 """
@@ -10,216 +11,319 @@ n_orb = (nup_orb + ndn_orb) is the electron density in orbital orb
 """
 
 def read_data(fnames):
-  E= []
-  Eerr = []
-  Ederiv= []
-  Ederiverr = []
-  dm = [[],[]]
-  dmerr = [[],[]]
-  dmderiv = [[],[]]
-  dmderiverr = [[],[]]
-
+  dfs = []
   for fname in fnames:
     with open(fname,'r') as f:
       data = json.load(f)
-    dm[0].append(   np.array(data['properties']['derivative_dm']['tbdm']['obdm']['up']))
-    dm[1].append(   np.array(data['properties']['derivative_dm']['tbdm']['obdm']['down']))
-    dmerr[0].append(np.array(data['properties']['derivative_dm']['tbdm']['obdm']['up_err']) )
-    dmerr[1].append(np.array(data['properties']['derivative_dm']['tbdm']['obdm']['down_err']) )
-    for dprdm in data['properties']['derivative_dm']['dprdm']:
-      dmderiv[0].append(    np.array(dprdm['tbdm']['obdm']['up']))
-      dmderiv[1].append(    np.array(dprdm['tbdm']['obdm']['down']))
-      dmderiverr[0].append( np.array(dprdm['tbdm']['obdm']['up_err']) )
-      dmderiverr[1].append( np.array(dprdm['tbdm']['obdm']['down_err']) )
-    E.extend(    data['properties']['total_energy']['value'] )
-    Eerr.extend( data['properties']['total_energy']['error'] )
-    Ederiv.extend(    data['properties']['derivative_dm']['dpenergy']['vals'] )
-    Ederiverr.extend( data['properties']['derivative_dm']['dpenergy']['err'] )
+    dfs.append(extract(data))
+  return pd.DataFrame(dfs)
 
-  dm = np.stack([np.stack(d) for d in dm])
-  dmerr = np.stack([np.stack(d) for d in dmerr])
-  dmderiv = np.stack([np.stack(d) for d in dmderiv])
-  dmderiverr = np.stack([np.stack(d) for d in dmderiverr])
-  return dm, dmerr, np.array(E), np.array(Eerr), dmderiv, dmderiverr, np.array(Ederiv), np.array(Ederiverr)
+def combine_dfs(df, spins=False):
+  keys = df.keys()
+  comb_df = {}
+  for k in keys:
+    arr = np.stack(df[k].values)
+    if k.find('deriv')>=0:
+      print('combine_df', k)
+      tinds = np.arange(len(arr.shape))
+      tinds[[0,1]] = [1,0]
+      arr = arr.transpose(tinds)
+    comb_df[k] = arr
+  en = np.concatenate(([comb_df['en']], comb_df['enderiv']), axis=0)
+  enerr = np.concatenate(([comb_df['enerr']], comb_df['enderiverr']), axis=0)
+  dm_sp = np.concatenate(([comb_df['dm']], comb_df['dmderiv']), axis=0)
+  dmerr_sp = np.concatenate(([comb_df['dmerr']], comb_df['dmderiverr']), axis=0)
+  dm = dm_sp.sum(axis=2)
+  dmerr = dmerr_sp.sum(axis=2)
+  if spins:
+    dm = np.concatenate((dm_sp, dm[:,:,np.newaxis]), axis=2)
+    dmerr = np.concatenate((dmerr_sp, dmerr[:,:,np.newaxis]), axis=2)
+  # dimensions: deriv, sample, (spin), (orb,orb)
+  return en, enerr, dm, dmerr
+
+def extract(data):
+  deriv_dm = data['properties']['derivative_dm']
+  nmo = len(deriv_dm['tbdm']['obdm']['up'])
+  # Values
+  en =    data['properties']['total_energy']['value'][0]
+  enerr = data['properties']['total_energy']['error'][0]
+  dm, dmerr = np.zeros((2,nmo,nmo)), np.zeros((2,nmo,nmo))
+  for s, spin in enumerate(['up','down']):
+    dm[s]    = np.array(deriv_dm['tbdm']['obdm'][spin])
+    dmerr[s] = np.array(deriv_dm['tbdm']['obdm'][spin+'_err']) 
+  
+  # Derivatives
+  dpwf =    np.array( deriv_dm['dpwf']['vals'] )
+  dpwferr = np.array( deriv_dm['dpwf']['err'] )
+  # energy
+  dpen =    np.array( deriv_dm['dpenergy']['vals'] )
+  dpenerr = np.array( deriv_dm['dpenergy']['err'] )
+  enderiv = dpen - en*dpwf
+  enderiverr = np.zeros(enderiv.shape) # TODO
+  # density matrix
+  nparam = len(dpwf)
+  dpdm = np.zeros((nparam,2,nmo,nmo))
+  dpdmerr = np.zeros((nparam,2,nmo,nmo))
+  for p,dprdm in enumerate(deriv_dm['dprdm']):
+    for s, spin in enumerate(['up','down']):
+      dpdm[p][s] =    np.array(dprdm['tbdm']['obdm'][spin])
+      dpdmerr[p][s] = np.array(dprdm['tbdm']['obdm'][spin+'_err'])
+  dmderiv = dpdm - np.einsum('skl,p->pskl',dm,dpwf)
+  dmderiverr = np.zeros(dmderiv.shape) # TODO
+
+  output = dict(en=en, enerr=enerr, dm=dm, dmerr=dmerr, 
+                enderiv=enderiv, enderiverr=enderiverr, 
+                dmderiv=dmderiv, dmderiverr=dmderiverr)
+  return output
+
 
 ## PLOT DESCRIPTOR DATA 
 import matplotlib.pyplot as plt
 
-def plot_obdm(dm, cutoff=None, lower_cutoff=None):
-  dm = dm.sum(axis=0)
-  if cutoff is not None:
-    dm = dm[:,:cutoff,:cutoff]
-  else: 
-    cutoff=dm.shape[-1]
-  if lower_cutoff is not None:
-    dm = dm[:,lower_cutoff:,lower_cutoff:]
-  else:
-    lower_cutoff=0
+def plot_obdm(dm, deriv=0, lowest_orb=1, **kwargs_):
+  highest_orb = lowest_orb+dm.shape[-1]
   n = len(dm)
-  print(dm.shape)
-  kwargs = dict(
-    vmin = np.amin(dm),
-    vmax = np.amax(dm))
-  fig, axs = plt.subplots(1,n, figsize=(10,3))
+  v = np.amax(np.abs(dm))
+  kwargs = dict( vmin=-v if deriv else 0, vmax=v, cmap='PRGn' if deriv else 'viridis')
+  kwargs.update(**kwargs_)
+  c=5
+  if n<5:
+    c=n
+  r=int(np.ceil(n/c))
+  fig, ax = plt.subplots(r,c, figsize=(2*c,3*r))
+  axs = ax.ravel()
   for i in range(n):
-    axs[i].imshow(dm[i], extent=[lower_cutoff,cutoff,cutoff,lower_cutoff], **kwargs)
-    axs[i].set_title('1.0 {0}'.format(i/5))
+    axs[i].imshow(dm[i], extent=[lowest_orb,highest_orb,highest_orb,lowest_orb], **kwargs)
   axs[0].set_ylabel(r'$n_\uparrow+n_\downarrow$ density')
   plt.tight_layout()
 
-def plot_obdm_all(dm, cutoff=None):
-  if cutoff is not None:
-    dm = dm[:,:,:cutoff,:cutoff]
-  dm = np.concatenate((dm, [dm.sum(axis=0)]), axis=0)
-  n = len(dm[0])
-  print(dm.shape)
-  kwargs = dict(
-    vmin = np.amin(dm),
-    vmax = np.amax(dm))
+def plot_obdm_all(dm, deriv=0):
+  n = len(dm)
+  v = np.amax(np.abs(dm))
+  kwargs = dict( vmin=-v if deriv else 0, vmax=v, cmap='PRGn' if deriv else 'plasma')
   fig, axs = plt.subplots(3,n, figsize=(12,4))
   for i in range(n):
     for s in [0,1,2]:
-      axs[s,i].imshow(dm[s,i], **kwargs)
+      axs[s,i].imshow(dm[i,s], **kwargs)
     axs[0,i].set_title('1.0 {0}'.format(i/5))
   for i in range(3):
     axs[i,0].set_ylabel(['up','down','sum'][i])
   plt.tight_layout()
 
-def plot_occupations_all(dm, dmerr, cutoff=None):
-  if cutoff is not None:
-    dm = dm[:,:,:cutoff,:cutoff]
-    dmerr = dmerr[:,:,:cutoff,:cutoff]
-  else:
-    cutoff = dm.shape[-1]
-  n = len(dm[0])
+def plot_occupations_all(dm, dmerr):
+  n = len(dm)
+  norbs = dm.shape[-1]
   fig, axs = plt.subplots(1,3, sharey=True, figsize=(8,3))
   #plt.axes([0.1,0.15,.75,.8])
   for i in range(dm.shape[-1]):
-    for s in [0,1]:
-      axs[s].errorbar(np.arange(n)/5, dm[s,:,i,i], yerr=dmerr[s,:,i,i])
-    axs[2].errorbar(np.arange(n)/5, dm[:,:,i,i].sum(axis=0), 
-                  yerr=np.linalg.norm(dmerr[:,:,i,i],axis=0))
+    for s in [0,1,2]:
+      axs[s].errorbar(np.arange(n), dm[:,s,i,i], yerr=dmerr[:,s,i,i])
   for i in range(3):
     axs[i].set_ylabel(['up','down','sum'][i])
-  axs[2].legend(np.arange(cutoff), loc='center left', bbox_to_anchor=(1, 0.5))
+  axs[2].legend(np.arange(norbs), loc='center left', bbox_to_anchor=(1, 0.5))
   plt.tight_layout()
 
-def plot_occupations(dm, dmerr, cutoff=None):
-  dm = dm.sum(axis=0)
-  dmerr = np.linalg.norm(dmerr, axis=0)
-  print(dm.shape, dmerr.shape)
-  if cutoff is not None:
-    dm = dm[:,:cutoff,:cutoff]
-  else:
-    cutoff = dm.shape[-1]
+def plot_occupations(dm, dmerr, lowest_orb=1):
   n = len(dm)
+  norbs = dm.shape[-1]
   plt.figure(figsize=(7,4))
   plt.axes([0.1,0.15,.75,.8])
   for i in range(dm.shape[-1]):
-    plt.errorbar(np.arange(n)/5, dm[:,i,i], yerr=dmerr[:,i,i])
-  plt.xlabel('weight ratio c2/c1')
+    plt.errorbar(np.arange(n), dm[:,i,i], yerr=dmerr[:,i,i])
+  plt.xlabel('sample no.')
   plt.ylabel('occupation')
-  plt.legend(np.arange(cutoff)+1, loc='center left', bbox_to_anchor=(1, 0.5))
+  plt.legend(np.arange(norbs)+lowest_orb, loc='center left', bbox_to_anchor=(1, 0.5))
 
-def plot_energy(E, Eerr, titlestr=''):
+def plot_virt_sum(E, Eerr, dm, dmerr, nvalence):
+  dens = np.einsum('ijj->i',dm[:,nvalence:,nvalence:])
+  ddens = np.linalg.norm(np.einsum('ijj->ij',dmerr[:,nvalence:,nvalence:]), axis=1)
+  n = len(dm)
+  plt.figure(figsize=(7,4))
+  plt.axes([0.1,0.15,.75,.8])
+  plt.errorbar(np.arange(n), (E-np.mean(E))/np.std(E), yerr=Eerr)
+  plt.errorbar(np.arange(n), (dens-np.mean(dens))/np.std(dens), yerr=ddens)
+  plt.xlabel('sample no.')
+  plt.ylabel('occupation')
+  plt.legend(['energy fluc','CB occ fluc'], loc='center left', bbox_to_anchor=(1, 0.5))
+  
+
+def plot_descriptors(dm, dmerr, lowest_orb=1):
+  n = len(dm)
+  norb = dm.shape[-1]
+  
+  plt.figure(figsize=(7,4))
+  plt.axes([0.1,0.15,.75,.8])
+  for i in range(n):
+    plt.errorbar(np.arange(norb)+lowest_orb, np.diag(dm[i]), 
+                  yerr=np.diag(dmerr[i]), marker='o', ls='')
+  plt.xlabel('orbital')
+  plt.ylabel('occupation')
+  plt.legend(np.arange(n), loc='center left', bbox_to_anchor=(1, 0.5))
+
+def descriptor_corr_mat(en, dm, lowest_orb=1):
+  n = len(dm)
+  norb = dm.shape[-1]
+  en = en-en.mean(axis=1)[:,np.newaxis]
+  dens = np.einsum('...kk->...k', dm-dm.mean(axis=1)[:,np.newaxis])
+  en = en.reshape((-1,1))
+  dens = dens.reshape((-1,norb))
+  descriptors = np.block([en, dens]).T
+  corrmat = np.corrcoef(descriptors)
+  v = np.amax(np.abs(corrmat))
+  im = plt.imshow(corrmat, vmin=-v, vmax=v, aspect='equal', cmap='PRGn')
+  plt.colorbar(im)
+  plt.title('Descriptor correlation') 
+ 
+  # fix labels
+  locs, labels = plt.xticks()
+  labels[1] = 'E'
+  for i,l in enumerate(locs):
+    if i<=1: continue
+    labels[i] = 'orb%i'%(l-1+lowest_orb)
+  plt.xticks(locs[1:-1], labels[1:-1], rotation=20)
+  plt.yticks(locs[1:-1], labels[1:-1], rotation=0)
+
+def plot_energy(E, Eerr, deriv=0, titlestr=''):
   n=len(E)
-  plt.errorbar(np.arange(n)/5, E, yerr=Eerr)
-  plt.xlabel('weight ratio c2/c1')
-  plt.ylabel('Energy (Ha)')
+  plt.errorbar(np.arange(n), E, yerr=Eerr)
+  plt.xlabel('sample no.')
+  if deriv>0: plt.ylabel('Energy derivative (Ha)')
+  else: plt.ylabel('Energy (Ha)')
   plt.title(titlestr)
 
-def make_descriptor_matrix(dm_spin, orb=-1, with_t=False):
-  dm = np.sum(dm_spin,axis=0)
-  const = np.ones(len(dm))
+def make_descriptor_matrix(E, dm, nsamples=10, orbs=(-1,), with_t=False):
+  print(E.shape, dm.shape)
+  norb = dm.shape[-1]
+  #dm = dm.transpose((1,0,2,3))
+  dens = np.einsum('...kk->k...',dm).reshape((norb, -1))
+  const = np.zeros(dens.shape[-1])
+  const[:nsamples] = 1
   descriptors = [const]
-  descriptors.append(dm[:,orb,orb])
-  if with_t:
-    descriptors.append(dm[:,orb,orb-1]+dm[:,orb,orb-1])
-  return np.stack(descriptors).T
+  for orb in orbs:
+    descriptors.append(dens[orb])
+  #if with_t:
+  #  descriptors.append( dm[:,orb,orb-1] + dm[:,orb,orb-1] )
+  D = np.stack(descriptors).T
+  return D, E.reshape(-1)
 
-def plot_fit_occ(D, dens_err, E, Eerr):
+def plot_fit(D, E, Eerr, nsamples=10 ):
   p, res, rank, sing = np.linalg.lstsq(D,E)
+  nparams = int(len(E)/(nsamples))-1
+  n = nsamples
   print('rank of descriptor matrix',rank)
-  print('params',p)
-  plt.plot(D[:,1], np.dot(D,p))
-  plt.errorbar(D[:,1], E, yerr=Eerr, xerr=dens_err, ls='', marker='o')
-  plt.title('$\epsilon_0={0}$, $\epsilon_1={1}$, Res. {2}'.format(*p,res))
-  plt.xlabel('Occupation of CBM orbital')
-  plt.ylabel('Energy')
-  plt.legend(['model','data'])
-  plt.tight_layout()
-  
-def plot_fit_deriv(D, dens_err, E, Eerr, nparams=0):
-  p, res, rank, sing = np.linalg.lstsq(D,E)
-  n = int(len(E)/(nparams+1))
-  print('rank of descriptor matrix',rank)
-  print('params',p)
+  print('model params',p)
   if nparams>0:
     plt.subplot(121)
-  plt.plot(D[:n,1], np.dot(D,p)[:n])
-  plt.errorbar(D[:n,1], E[:n], yerr=Eerr[:n], xerr=dens_err[:n], ls='', marker='o')
-  plt.xlabel('Occupation of CBM orbital')
-  plt.ylabel('Energy')
+  #plt.plot(D[:n,-1], np.dot(D,p)[:n])
+  #plt.errorbar(D[:n,-1], E[:n], yerr=Eerr[:n], ls='', marker='o')
+  #plt.xlabel('Occupation of CBM orbital')
+  #plt.legend(['model','data'])
+  Emin, Emax = np.amin(E[:n]), np.amax(E[:n])
+  plt.plot((Emin,Emax),(Emin,Emax), ls='-')
+  plt.errorbar(np.dot(D,p)[:n], E[:n], yerr=Eerr[:n], ls='', marker='o')
+  plt.xlabel('Model estimate')
+  plt.ylabel('Energy (Ha)')
   
   if nparams>0:
     plt.subplot(122)
-    plt.plot(D[n:,1], np.dot(D,p)[n:])
-    plt.errorbar(D[n:,1], E[n:], yerr=Eerr[n:], xerr=dens_err[n:], ls='-', marker='o')
-    plt.xlabel('CBM occupation derivative ')
+    #plt.plot(D[n:,1], np.dot(D,p)[n:])
+    dEmin, dEmax = np.amin(E[n:]), np.amax(E[n:])
+    plt.plot((dEmin,dEmax),(dEmin,dEmax), ls='-')
+    plt.errorbar(np.dot(D,p)[n:], E[n:], yerr=Eerr[n:], ls='', marker='o')
+    plt.xlabel('Model estimate')
     plt.ylabel('Energy derivative')
-    plt.legend(['model','data'])
+    #plt.legend(['model','data'])
     plt.subplot(121)
   
-  plt.title('$\epsilon_0={0}$ \n $\epsilon_1={1}$ \n Res. {2}'.format(*p,res))
-  plt.legend(['model','data'])
+  plt.title('Rank {0} \n Res. {1}'.format(rank,res))
+  #plt.legend(['model','data'])
   plt.tight_layout()
-  
+ 
+def plot_fit_params(D, E, zero_ind=None, lowest_orb=1):
+  p, res, rank, sing = np.linalg.lstsq(D,E)
+  if zero_ind is not None:
+    p = p - p[zero_ind]
+  #for y in p[1:]:
+  #  plt.axhline(y=y, ls='--')
+  plt.plot(np.arange(len(p)-1)+lowest_orb, p[1:])
+  plt.ylabel('Energy (Ha)')
+  plt.title('Model band energies')
 
 if __name__=='__main__':
   if len(sys.argv)>1:
     fnames = sys.argv[1:] 
+    try:
+      import re
+      nums = [int( re.sub("[^0-9]", "", f)) for f in fnames]
+      inds = np.argsort(nums)
+      fnames = [fnames[i] for i in inds]
+    except:
+      print('No numbers in filenames; can\'t sort')
   else:
     print('give json file names of results')
-  dm, dmerr, E, Eerr, dmderiv, dmderiverr, Ederiv, Ederiverr = read_data(fnames)
-  # Plot data 
-  qmcstr = fnames[0].split('.')[1]
-  print('qmcstr',qmcstr)
-  deriv = False
-  derivstr = '_deriv' if deriv else ''
+  df = read_data(fnames)
+  n=nsamples = len(fnames)
+
+  qmcstr = fnames[0].split('.')[1] # vmc or dmc
+  deriv = 0
+  derivstr = '_deriv%i'%deriv if deriv else ''
+  label = '_2orb'
+  print(qmcstr+derivstr)
+
+  en, enerr, dm, dmerr = combine_dfs(df, spins=False)
   
-  if deriv: plot_energy(Ederiv, Ederiverr, titlestr=qmcstr+derivstr)
-  else: plot_energy(E, Eerr, titlestr=qmcstr)
-  plt.savefig('{0}{1}_energy.png'.format(qmcstr,derivstr))
+  print('trace', np.trace(dm[0], axis1=1, axis2=2))
+  ## Plot data 
+  # Plot energy
+  plot_energy(en[deriv], enerr[deriv], deriv=deriv, titlestr=qmcstr+derivstr)
+  plt.savefig('{0}{1}{2}_energy.png'.format(qmcstr,derivstr,label))
   plt.show()
-  if deriv: plot_occupations_all(dmderiv, dmderiverr )
-  else: plot_occupations_all(dm, dmerr )
-  plt.savefig('{0}{1}_occupations.png'.format(qmcstr, derivstr))
-  plt.show()
-  plot_obdm_all(dmderiv if deriv else dm)
-  plt.savefig('{0}{1}_obdm.png'.format(qmcstr,derivstr))
+ 
+  # Plot occupations
+  plot_virt_sum(en[deriv], enerr[deriv], dm[deriv], dmerr[deriv], nvalence=4)
   plt.show()
   
+  plot_occupations(dm[deriv], dmerr[deriv], lowest_orb=13)
+  plt.savefig('{0}{1}{2}_occupations.png'.format(qmcstr, derivstr,label))
+  plot_descriptors(dm[deriv], dmerr[deriv], lowest_orb=13)
+  plt.savefig('{0}{1}{2}_descriptors.png'.format(qmcstr, derivstr,label))
+  plt.show()
+  
+  # Show OBDM
+  plot_obdm(dm[deriv][[0,3,6,9]], deriv=deriv, lowest_orb=13)#, cmap='nipy_spectral')
+  plt.savefig('{0}{1}{2}_obdm.png'.format(qmcstr,derivstr,label))
+  plt.show()
+ 
+  # Show covariance matrix 
+  print(en.shape, dm.shape)
+  descriptor_corr_mat(en, dm, lowest_orb=13)
+  plt.savefig('{0}{1}{2}_corrmat.png'.format(qmcstr,'_allderivs'+0*derivstr,label))
+  plt.show()
   quit()
 
-  # Fit model
+  ## Fit model
+  norbs = dm.shape[-1]
+  orbs = (-2,)#np.arange(1,norbs-2) 
+  print(orbs)
+  D, E = make_descriptor_matrix(en, dm, nsamples=len(fnames), orbs=orbs)
+  Eerr = enerr.T.reshape(-1)
+ 
+  derivstr = '_allderivs'
+  deriv=1
+  if deriv==0:
+    derivstr='' 
+    D = D[:n]
+    E = E[:n]
+    Eerr = Eerr[:n]
   
-  orb = 2
-  D = make_descriptor_matrix(dm, orb=orb)
-  Dderiv = make_descriptor_matrix(dmderiv, orb=orb)
-  Dderiv[:,0] = 0
-  dens_err = np.linalg.norm(dmerr[:,:,orb,orb], axis=0)
-  dderiv_err = np.linalg.norm(dmderiverr[:,:,orb,orb], axis=0)
-  
-  D = np.concatenate([D, Dderiv], axis=0)
-  derr = np.concatenate((dens_err, dderiv_err), axis=0)
-  E = np.concatenate((E,Ederiv))
-  Eerr = np.concatenate((Eerr,Ederiverr))
-  plot_fit_deriv(D, derr, E, Eerr, nparams=1)
-  plt.savefig('{0}_deriv_2orb_model.png'.format(qmcstr))
-  
+  #derr = np.linalg.norm(np.stack(df['dmerr'].values)[:,:,orb,orb], axis=1)
+  plot_fit(D, E, Eerr, nsamples=nsamples)
+  plt.savefig('{0}{1}{2}_model.png'.format(qmcstr,derivstr,label))
   plt.show()
 
-
+  plot_fit_params(D, E, zero_ind=None, lowest_orb=14)
+  plt.savefig('{0}{1}{2}_model_bands.png'.format(qmcstr,derivstr,label))
+  plt.show()
 
 
 
