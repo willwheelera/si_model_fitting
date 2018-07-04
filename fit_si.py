@@ -163,8 +163,9 @@ def plot_descriptors(dm, dmerr, lowest_orb=1):
 def descriptor_corr_mat(en, dm, lowest_orb=1):
   n = len(dm)
   norb = dm.shape[-1]
-  en = en-en.mean(axis=1)[:,np.newaxis]
-  dens = np.einsum('...kk->...k', dm-dm.mean(axis=1)[:,np.newaxis])
+  en[0] -= en[0].mean(axis=0)
+  dens = np.einsum('...kk->...k', dm)
+  dens[0] -= dens[0].mean(axis=0)
   en = en.reshape((-1,1))
   dens = dens.reshape((-1,norb))
   descriptors = np.block([en, dens]).T
