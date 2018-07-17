@@ -16,20 +16,26 @@ if __name__=='__main__':
   key = list(bs.bands.keys())[0]
   mproj_bands = bs.bands[key]
 
+  vbm = 3
+  cbm = 4
+
   print(mproj_bands.shape)
   print(np.round(mproj_kpts[[0,10,90]], 3))
   xkpts = np.abs(mproj_kpts[xinds,0])
   print(xinds)
   print(np.round(xkpts,3))
   print(bs.kpoints[0].__dict__.keys())
-  #plt.plot(xkpts, mproj_bands[:6,xinds].T)
-  #plt.xlabel('k (along $\Gamma$-$X$)')
-  #plt.ylabel('band energy (eV)')
-  #plt.title('materials project')
-  #plt.show()
+  
+  plt.plot(xkpts, mproj_bands[:6,xinds].T)
+  plt.axhline(y=mproj_bands[vbm,0], ls=':')
+  plt.axhline(y=mproj_bands[cbm,90], ls=':')
+  plt.xlabel('k (along $\Gamma$-$X$)')
+  plt.ylabel('band energy (eV)')
+  plt.title('materials project')
+  plt.show()
 
-  nbands = 6
-  fig, axs = plt.subplots(2,2, sharey=True)
+  nbands = 8
+  fig, axs = plt.subplots(2,2, sharey=False)
 
   axs[0,0].plot(mproj_bands[:nbands,0])
   axs[0,1].plot(mproj_bands[:nbands,90])
@@ -60,14 +66,14 @@ if __name__=='__main__':
     axs[1,1].plot(bands[1][:nbands]-mproj_bands[:nbands,90])
     axs[1,1].set_title('$X$ differences')
     cutoff = float(fname.split('/')[0][20:])
-    gap.append((cutoff,bands[1][0]-bands[0][0]))
+    gap.append((cutoff,bands[1][cbm]-bands[0][vbm]))
   axs[0,1].legend(['mat_proj','0.0','0.06','0.1','0.2'], 
       bbox_to_anchor=(.5,.0), loc='lower left')
   plt.tight_layout()
   plt.show()
 
   ax = plt.axes()
-  mpgap = mproj_bands[0,90]-mproj_bands[0,0]
+  mpgap = mproj_bands[cbm,90]-mproj_bands[vbm,0]
   ax.axhline(y=mpgap)
   ax.scatter(0,mpgap)
   for g in gap:
