@@ -2,6 +2,7 @@ import numpy as np
 import json
 import sys
 import pandas as pd
+import statsmodels.api as sm
 # Given the QMC data, fit on-site energies to Si (Gamma point) orbitals
 
 """
@@ -208,7 +209,11 @@ def make_descriptor_matrix(E, dm, nsamples=10, orbs=(-1,), with_t=False):
   return D, E.reshape(-1)
 
 def plot_fit(D, E, Eerr, nsamples=10 ):
-  p, res, rank, sing = np.linalg.lstsq(D,E)
+  #p, res, rank, sing = np.linalg.lstsq(D,E)
+  model = sm.OLS(E,D)
+  result = model.fit()
+  p = result.params
+  perr = result.bse
   nparams = int(len(E)/(nsamples))-1
   n = nsamples
   print('rank of descriptor matrix',rank)
@@ -221,7 +226,8 @@ def plot_fit(D, E, Eerr, nsamples=10 ):
   #plt.legend(['model','data'])
   Emin, Emax = np.amin(E[:n]), np.amax(E[:n])
   plt.plot((Emin,Emax),(Emin,Emax), ls='-')
-  plt.errorbar(np.dot(D,p)[:n], E[:n], yerr=Eerr[:n], ls='', marker='o')
+  plt.errorbar(np.dot(D,p)[:n], E[:n], yerr=Eerr[:n], xerr=np.dot(D**2,perr**2)[:n]**.5, 
+                ls='', marker='o')
   plt.xlabel('Model estimate')
   plt.ylabel('Energy (Ha)')
   
@@ -236,19 +242,38 @@ def plot_fit(D, E, Eerr, nsamples=10 ):
     #plt.legend(['model','data'])
     plt.subplot(121)
   
-  plt.title('Rank {0} \n Res. {1}'.format(rank,res))
+  #plt.title('Rank {0} \n Res. {1}'.format(rank,res))
   #plt.legend(['model','data'])
   plt.tight_layout()
  
-def plot_fit_params(D, E, zero_ind=None, lowest_orb=1):
-  p, res, rank, sing = np.linalg.lstsq(D,E)
+def plot_fit_params(D, E, zero_ind=None, lowest_orb=1, use_eV=False):
+  #p, res, rank, sing = np.linalg.lstsq(D,E)
+  model = sm.OLS(E,D)
+  result = model.fit()
+  p = result.params
+  perr = result.bse
+  print('fit params\n',np.array((p,perr)).T)
+
   if zero_ind is not None:
     p = p - p[zero_ind]
   #for y in p[1:]:
   #  plt.axhline(y=y, ls='--')
-  plt.plot(np.arange(len(p)-1)+lowest_orb, p[1:])
+  if use_eV:
+    Hartree = 27.2114
+    p=p*Hartree
+    perr=perr*Hartree
+  plt.errorbar(np.arange(len(p)-1)+lowest_orb, p[1:], perr[1:])
   plt.ylabel('Energy (Ha)')
+  if use_eV:
+    plt.ylabel('Energy (eV)')
   plt.title('Model band energies')
+
+def print_en_list(E):
+  ind = np.arange(len(E))+1
+  ar = np.zeros((len(E),2))
+  ar[:,0] = ind
+  ar[:,1] = E
+  print(ar)
 
 if __name__=='__main__':
   if len(sys.argv)>1:
@@ -268,43 +293,45 @@ if __name__=='__main__':
   qmcstr = fnames[0].split('.')[1] # vmc or dmc
   deriv = 0
   derivstr = '_deriv%i'%deriv if deriv else ''
-  label = '_2orb'
+  label = '_lowen'
   print(qmcstr+derivstr)
 
   en, enerr, dm, dmerr = combine_dfs(df, spins=False)
   
   print('trace', np.trace(dm[0], axis1=1, axis2=2))
-  ## Plot data 
-  # Plot energy
-  plot_energy(en[deriv], enerr[deriv], deriv=deriv, titlestr=qmcstr+derivstr)
-  plt.savefig('{0}{1}{2}_energy.png'.format(qmcstr,derivstr,label))
-  plt.show()
- 
-  # Plot occupations
-  plot_virt_sum(en[deriv], enerr[deriv], dm[deriv], dmerr[deriv], nvalence=4)
-  plt.show()
   
-  plot_occupations(dm[deriv], dmerr[deriv], lowest_orb=13)
-  plt.savefig('{0}{1}{2}_occupations.png'.format(qmcstr, derivstr,label))
-  plot_descriptors(dm[deriv], dmerr[deriv], lowest_orb=13)
-  plt.savefig('{0}{1}{2}_descriptors.png'.format(qmcstr, derivstr,label))
-  plt.show()
-  
-  # Show OBDM
-  plot_obdm(dm[deriv][[0,3,6,9]], deriv=deriv, lowest_orb=13)#, cmap='nipy_spectral')
-  plt.savefig('{0}{1}{2}_obdm.png'.format(qmcstr,derivstr,label))
-  plt.show()
+  if True: ## Plot data 
+    # Plot energy
+    plot_energy(en[deriv], enerr[deriv], deriv=deriv, titlestr=qmcstr+derivstr)
+    plt.savefig('{0}{1}{2}_energy.png'.format(qmcstr,derivstr,label))
+    plt.show()
+    quit()
+
+    # Plot occupations
+    plot_virt_sum(en[deriv], enerr[deriv], dm[deriv], dmerr[deriv], nvalence=4)
+    plt.show()
+    
+    plot_occupations(dm[deriv], dmerr[deriv], lowest_orb=13)
+    plt.savefig('{0}{1}{2}_occupations.png'.format(qmcstr, derivstr,label))
+    plot_descriptors(dm[deriv], dmerr[deriv], lowest_orb=13)
+    plt.savefig('{0}{1}{2}_descriptors.png'.format(qmcstr, derivstr,label))
+    plt.show()
+    
+    # Show OBDM
+    plot_obdm(dm[deriv][[0,3,6,9]], deriv=deriv, lowest_orb=13)#, cmap='nipy_spectral')
+    plt.savefig('{0}{1}{2}_obdm.png'.format(qmcstr,derivstr,label))
+    plt.show()
  
-  # Show covariance matrix 
-  print(en.shape, dm.shape)
-  descriptor_corr_mat(en, dm, lowest_orb=13)
-  plt.savefig('{0}{1}{2}_corrmat.png'.format(qmcstr,'_allderivs'+0*derivstr,label))
-  plt.show()
-  quit()
+    # Show covariance matrix 
+    print(en.shape, dm.shape)
+    descriptor_corr_mat(en, dm, lowest_orb=13)
+    plt.savefig('{0}{1}{2}_corrmat.png'.format(qmcstr,'_allderivs'+0*derivstr,label))
+    plt.show()
+    quit()
 
   ## Fit model
   norbs = dm.shape[-1]
-  orbs = (-2,)#np.arange(1,norbs-2) 
+  orbs = np.arange(1,norbs-2) # which MOs to use for fitting model, indexed by which orbs were computed in QMC; 1 skips the first one (no change in the descriptor), norbs-2 skips the last one (no change in descriptor) and the second to last (swapping a DOF for the constant shift) 
   print(orbs)
   D, E = make_descriptor_matrix(en, dm, nsamples=len(fnames), orbs=orbs)
   Eerr = enerr.T.reshape(-1)
