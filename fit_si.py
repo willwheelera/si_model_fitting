@@ -216,7 +216,8 @@ def plot_fit(D, E, Eerr, nsamples=10 ):
   perr = result.bse
   nparams = int(len(E)/(nsamples))-1
   n = nsamples
-  print('rank of descriptor matrix',rank)
+  #print('rank of descriptor matrix',rank)
+  print('$R^2$',result.rsquared)
   print('model params',p)
   if nparams>0:
     plt.subplot(121)
@@ -226,7 +227,7 @@ def plot_fit(D, E, Eerr, nsamples=10 ):
   #plt.legend(['model','data'])
   Emin, Emax = np.amin(E[:n]), np.amax(E[:n])
   plt.plot((Emin,Emax),(Emin,Emax), ls='-')
-  plt.errorbar(np.dot(D,p)[:n], E[:n], yerr=Eerr[:n], xerr=np.dot(D**2,perr**2)[:n]**.5, 
+  plt.errorbar(np.dot(D,p)[:n], E[:n], yerr=Eerr[:n], xerr=np.dot(D**2,perr**2)[:n]**0.5, 
                 ls='', marker='o')
   plt.xlabel('Model estimate')
   plt.ylabel('Energy (Ha)')
@@ -236,7 +237,8 @@ def plot_fit(D, E, Eerr, nsamples=10 ):
     #plt.plot(D[n:,1], np.dot(D,p)[n:])
     dEmin, dEmax = np.amin(E[n:]), np.amax(E[n:])
     plt.plot((dEmin,dEmax),(dEmin,dEmax), ls='-')
-    plt.errorbar(np.dot(D,p)[n:], E[n:], yerr=Eerr[n:], ls='', marker='o')
+    plt.errorbar(np.dot(D,p)[n:], E[n:], yerr=Eerr[n:], xerr=np.dot(D**2,perr**2)[n:]**0.5
+, ls='', marker='o')
     plt.xlabel('Model estimate')
     plt.ylabel('Energy derivative')
     #plt.legend(['model','data'])
@@ -305,7 +307,6 @@ if __name__=='__main__':
     plot_energy(en[deriv], enerr[deriv], deriv=deriv, titlestr=qmcstr+derivstr)
     plt.savefig('{0}{1}{2}_energy.png'.format(qmcstr,derivstr,label))
     plt.show()
-    quit()
 
     # Plot occupations
     plot_virt_sum(en[deriv], enerr[deriv], dm[deriv], dmerr[deriv], nvalence=4)
@@ -318,12 +319,16 @@ if __name__=='__main__':
     plt.show()
     
     # Show OBDM
-    plot_obdm(dm[deriv][[0,3,6,9]], deriv=deriv, lowest_orb=13)#, cmap='nipy_spectral')
+    plot_obdm(dm[deriv], deriv=deriv, lowest_orb=13, cmap='nipy_spectral')
     plt.savefig('{0}{1}{2}_obdm.png'.format(qmcstr,derivstr,label))
     plt.show()
  
     # Show covariance matrix 
     print(en.shape, dm.shape)
+    descriptor_corr_mat(en[[deriv]], dm[[deriv]], lowest_orb=13)
+    plt.savefig('{0}{1}{2}_corrmat.png'.format(qmcstr,derivstr,label))
+    plt.show()
+
     descriptor_corr_mat(en, dm, lowest_orb=13)
     plt.savefig('{0}{1}{2}_corrmat.png'.format(qmcstr,'_allderivs'+0*derivstr,label))
     plt.show()
