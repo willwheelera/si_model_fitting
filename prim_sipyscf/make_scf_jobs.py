@@ -15,16 +15,6 @@ param_set = [dict(naug=0, cutoff=.0),
              dict(naug=1, cutoff=.1),
              dict(naug=2, cutoff=.2)]
 
-bases = []
-bases.append(ap.edit_xml_basis(*basis_args, **basis_kwargs))
-basis_kwargs.update(cutoff=.06)
-bases.append(ap.edit_xml_basis(*basis_args, **basis_kwargs))
-basis_kwargs.update(naug=1, cutoff=.1)
-bases.append(ap.edit_xml_basis(*basis_args, **basis_kwargs))
-basis_kwargs.update(naug=2, cutoff=.2)
-bases.append(ap.edit_xml_basis(*basis_args, **basis_kwargs))
-
-jobs = []
 for params in param_set:
   basis_kwargs.update(**params)
   basis = ap.edit_xml_basis(*basis_args, **basis_kwargs)
