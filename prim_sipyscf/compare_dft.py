@@ -45,7 +45,8 @@ if __name__=='__main__':
   fnames = ['si_pyscf_aug0_cutoff0.0/scf.py.chkfile',
             'si_pyscf_aug0_cutoff0.06/scf.py.chkfile',
             'si_pyscf_aug1_cutoff0.1/scf.py.chkfile',
-            'si_pyscf_aug2_cutoff0.2/scf.py.chkfile']
+            #'si_pyscf_aug2_cutoff0.2/scf.py.chkfile'
+]
   gap = []
   for fname in fnames:
     mf = chkinfo.get_si_mf(fname, kmesh=(4,4,4))
