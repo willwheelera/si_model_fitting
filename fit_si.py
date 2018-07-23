@@ -11,6 +11,8 @@ E_tot = \sum_{orb} E_orb n_orb
 n_orb = (nup_orb + ndn_orb) is the electron density in orbital orb
 """
 
+ha2eV = 27.2114
+
 def read_data(fnames):
   dfs = []
   for fname in fnames:
@@ -248,7 +250,7 @@ def plot_fit(D, E, Eerr, nsamples=10 ):
   #plt.legend(['model','data'])
   plt.tight_layout()
  
-def plot_fit_params(D, E, zero_ind=None, lowest_orb=1, use_eV=False):
+def plot_fit_params(D, E, zero_ind=None, lowest_orb=1, use_eV=True, mfenergy=None):
   #p, res, rank, sing = np.linalg.lstsq(D,E)
   model = sm.OLS(E,D)
   result = model.fit()
@@ -261,13 +263,21 @@ def plot_fit_params(D, E, zero_ind=None, lowest_orb=1, use_eV=False):
   #for y in p[1:]:
   #  plt.axhline(y=y, ls='--')
   if use_eV:
-    Hartree = 27.2114
-    p=p*Hartree
-    perr=perr*Hartree
-  plt.errorbar(np.arange(len(p)-1)+lowest_orb, p[1:], perr[1:])
+    p=p*ha2eV
+    perr=perr*ha2eV
+  orbs = np.arange(len(p)-1)+lowest_orb
+  pline = plt.errorbar(orbs, p[1:], perr[1:])
+  if mfenergy is not None:
+    mfe = mfenergy[orbs-1]
+    if use_eV:  
+      mfe = mfe*ha2eV 
+    mfe = mfe - mfe[2] + p[2]
+    mfline, = plt.plot(orbs, mfe)
+    plt.legend([pline,mfline],['model parameters','DFT energies'])
   plt.ylabel('Energy (Ha)')
   if use_eV:
     plt.ylabel('Energy (eV)')
+  plt.xlabel('orbital no.')
   plt.title('Model band energies')
 
 def print_en_list(E):
@@ -276,6 +286,14 @@ def print_en_list(E):
   ar[:,0] = ind
   ar[:,1] = E
   print(ar)
+
+def get_si_energies(chkfile):
+  from pyscf import pbc, lib 
+  from pyscf.pbc.dft import KRKS
+  mol = pbc.gto.cell.loads(lib.chkfile.load(chkfile, 'mol'))
+  mf = KRKS(mol)
+  mf.__dict__.update(lib.chkfile.load(chkfile,'scf'))
+  return mf.mo_energy
 
 if __name__=='__main__':
   if len(sys.argv)>1:
@@ -305,7 +323,7 @@ if __name__=='__main__':
   if True: ## Plot data 
     # Plot energy
     plot_energy(en[deriv], enerr[deriv], deriv=deriv, titlestr=qmcstr+derivstr)
-    plt.savefig('{0}{1}{2}_energy.png'.format(qmcstr,derivstr,label))
+    plt.savefig('{0}{1}{2}_energy.pdf'.format(qmcstr,derivstr,label))
     plt.show()
 
     # Plot occupations
@@ -313,24 +331,24 @@ if __name__=='__main__':
     plt.show()
     
     plot_occupations(dm[deriv], dmerr[deriv], lowest_orb=13)
-    plt.savefig('{0}{1}{2}_occupations.png'.format(qmcstr, derivstr,label))
+    plt.savefig('{0}{1}{2}_occupations.pdf'.format(qmcstr, derivstr,label))
     plot_descriptors(dm[deriv], dmerr[deriv], lowest_orb=13)
-    plt.savefig('{0}{1}{2}_descriptors.png'.format(qmcstr, derivstr,label))
+    plt.savefig('{0}{1}{2}_descriptors.pdf'.format(qmcstr, derivstr,label))
     plt.show()
     
     # Show OBDM
     plot_obdm(dm[deriv], deriv=deriv, lowest_orb=13, cmap='nipy_spectral')
-    plt.savefig('{0}{1}{2}_obdm.png'.format(qmcstr,derivstr,label))
+    plt.savefig('{0}{1}{2}_obdm.pdf'.format(qmcstr,derivstr,label))
     plt.show()
  
     # Show covariance matrix 
     print(en.shape, dm.shape)
     descriptor_corr_mat(en[[deriv]], dm[[deriv]], lowest_orb=13)
-    plt.savefig('{0}{1}{2}_corrmat.png'.format(qmcstr,derivstr,label))
+    plt.savefig('{0}{1}{2}_corrmat.pdf'.format(qmcstr,derivstr,label))
     plt.show()
 
     descriptor_corr_mat(en, dm, lowest_orb=13)
-    plt.savefig('{0}{1}{2}_corrmat.png'.format(qmcstr,'_allderivs'+0*derivstr,label))
+    plt.savefig('{0}{1}{2}_corrmat.pdf'.format(qmcstr,'_allderivs'+0*derivstr,label))
     plt.show()
     quit()
 
@@ -351,11 +369,12 @@ if __name__=='__main__':
   
   #derr = np.linalg.norm(np.stack(df['dmerr'].values)[:,:,orb,orb], axis=1)
   plot_fit(D, E, Eerr, nsamples=nsamples)
-  plt.savefig('{0}{1}{2}_model.png'.format(qmcstr,derivstr,label))
+  plt.savefig('{0}{1}{2}_model.pdf'.format(qmcstr,derivstr,label))
   plt.show()
 
-  plot_fit_params(D, E, zero_ind=None, lowest_orb=14)
-  plt.savefig('{0}{1}{2}_model_bands.png'.format(qmcstr,derivstr,label))
+  dft_energy = get_si_energies('../conv_sipyscf/si_conv_k888/scf.py.chkfile')
+  plot_fit_params(D, E, zero_ind=2, lowest_orb=14, mfenergy=dft_energy[0])
+  plt.savefig('{0}{1}{2}_model_bands.pdf'.format(qmcstr,derivstr,label))
   plt.show()
 
 
