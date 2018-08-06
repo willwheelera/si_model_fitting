@@ -1,0 +1,50 @@
+\documentclass[twocolumn]{article}
+
+% packages
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+%\usepackage{amssymb}
+%\usepackage{amsthm}
+\usepackage{braket}
+\usepackage{graphicx}
+%\usepackage{bbm}
+%\usepackage{multirow}
+\usepackage{tikz}
+\usetikzlibrary{positioning}
+\usetikzlibrary{shapes.arrows}
+\usepackage{color}
+%\usepackage[colorinlistoftodos]{todonotes}
+%\usepackage[absolute,overlay]{textpos}
+%\usepackage{hyperref} % Should be last package imported
+\usepackage{fullpage}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% SHORTCUTS %%%
+
+%\newcommand{\pagehline}{\\\specialrule{.01pt}{0pt}{5pt}}
+\newcommand{\pagehline}{\noindent\rule{\textwidth}{0.2pt}}
+
+\newcommand{\paren}[1]{\left( #1 \right)}
+\newcommand{\expectation}[1]{\left< #1 \right>}
+\newcommand{\brac}[1]{\left[ #1 \right]}
+\newcommand{\zerodel}{.\kern-\nulldelimiterspace}
+\newcommand{\abs}[1]{\left\vert #1 \right\vert}
+\newcommand{\wt}[1]{\widetilde{#1}}
+
+\newcommand{\vecE}{\mathbf{E}}
+\newcommand{\vecB}{\mathbf{B}}
+\newcommand{\kvec}{\mathbf{k}}
+\newcommand{\xvec}{\mathbf{x}}
+\newcommand{\rvec}{\mathbf{r}}
+\newcommand{\bvec}{\mathbf{b}}
+\newcommand{\Rvec}{\mathbf{R}}
+\newcommand{\zbar}{\overline{z}}
+\newcommand{\curl}{\nabla\times}
+\renewcommand{\div}{\nabla\cdot}
+
+\DeclareMathOperator{\Lagr}{\mathcal{L}}
+\DeclareMathOperator{\Ham}{\mathcal{H}}
+\DeclareMathOperator{\tr}{tr}
+
+\newcommand{\lucas}[1]{\textcolor{blue}{\bf [LKW #1]}} % Lucas comment

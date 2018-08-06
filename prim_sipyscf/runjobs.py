@@ -1,10 +1,7 @@
 import pickle
-import sys
 
-assert len(sys.argv)>1, "need pkl filename(s)"
+with open('jobs.pkl','rb') as f:
+  jobs = pickle.load(f)
 
-for fname in sys.argv[1:]:
-  with open(fname,'rb') as f:
-    job = pickle.load(f)
+for job in jobs:
   job.nextstep()
-

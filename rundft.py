@@ -33,40 +33,16 @@ def si_pyscf():
     })
   pman=PySCFManager(
       name='scf',
-      path='sipyscf',
+      path='test_sipyscf',
       writer=pwriter,
       runner=PySCFRunnerPBS(
           queue='secondary',
           nn=1,
-          np='allprocs',
+          np=16,
           walltime='4:00:00'
         )
     )
   jobs.append(pman)
-
-  #var=QWalkManager(
-  #    name='var',
-  #    path=pman.path,
-  #    writer=VarianceWriter(),
-  #    reader=VarianceReader(),
-  #    runner=RunnerPBS(
-  #        nn=1,queue='secondary',walltime='0:10:00'
-  #      ),
-  #    trialfunc=SlaterJastrow(pman,kpoint=0)
-  #  )
-  #jobs.append(var)
-
-  #lin=QWalkManager(
-  #    name='lin',
-  #    path=pman.path,
-  #    writer=LinearWriter(),
-  #    reader=LinearReader(),
-  #    runner=RunnerPBS(
-  #        nn=1,queue='secondary',walltime='0:30:00'
-  #      ),
-  #    trialfunc=SlaterJastrow(slatman=pman,jastman=var,kpoint=0)
-  #  )
-  #jobs.append(lin)
 
   return jobs
 
