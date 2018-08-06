@@ -76,9 +76,9 @@ def extract(data):
 
   output = dict(en=en, enerr=enerr, dm=dm, dmerr=dmerr, 
                 enderiv=enderiv, enderiverr=enderiverr, 
-                dmderiv=dmderiv, dmderiverr=dmderiverr)
+                dmderiv=dmderiv, dmderiverr=dmderiverr,
+                dpwferr=dpwferr, dpenerr=dpenerr, dpdmerr=dpdmerr)
   return output
-
 
 ## PLOT DESCRIPTOR DATA 
 import matplotlib.pyplot as plt
