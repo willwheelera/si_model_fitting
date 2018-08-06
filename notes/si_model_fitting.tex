@@ -33,6 +33,30 @@ While perturbation theory methods have been used to this end, so far QMC has not
 
 We demonstrate a method to compute band structure from QMC and apply it to silicon, which has been well understood both experimentally and theoretically.
 
+\section{Model fitting}
+
+Our approach to model fitting with QMC has been discussed in previous papers, so we briefly summarize it here.
+The goal is to generate a simple model that accurately describes the states in a low energy subspace of the Hilbert space, the space spanned by a set of low energy eigenstates of the Hamiltonian.
+
+If we suppose a general form for the model Hamiltonian that includes one- and two-body terms, we can write it as
+
+\begin{equation}
+\hat{H} = \sum_i \epsilon_i \hat{n}_i + \sum_{ij} t_{ij} \hat{c}_i^\dagger \hat{c}_j + \sum_{ijkl} V_{ijkl} \hat{c}_i^\dagger \hat{c}_j^dagger \hat{c}_k \hat{c}_l.
+\end{equation}
+
+The operators $\hat{c}_i^\dagger, \hat{c}_i$ are defined on a set of orbitals we are free to choose.
+These operators and the Hamiltonian can be defined both on the ab initio Hilbert space and on the Hilbert space of the effective model.
+For any state $\Psi_{\rm LE}$ in the low-energy many-body Hilbert space (not necessarily an eigenstate), the expectation values of the operators should match those of the corresponding state $\Psi_{\rm model}$ in the space of the effective model.
+
+\begin{equation}
+\braket{\Psi_{\rm LE} | \hat{H} | \Psi_{\rm LE}} = 
+\sum_i \epsilon_i \braket{\Psi_{\rm LE} | \hat{n}_i | \Psi_{\rm LE}} + 
+\sum_{ij} t_{ij} \braket{\Psi_{\rm LE} | \hat{c}_i^\dagger \hat{c}_j | \Psi_{\rm LE}} + 
+\sum_{ijkl} V_{ijkl} \braket{ \Psi_{\rm LE} | \hat{c}_i^\dagger \hat{c}_j^dagger \hat{c}_k \hat{c}_l | \Psi_{\rm LE}}.
+\end{equation}
+
+
+
 \section{Band gap model}
 
 To demonstrate the idea, we construct a simple model to compute the energy of the transition from the valence band at $\Gamma$ to the conduction band at $X$ (the lowest transition occuring in a conventional cell with periodic boundary conditions).
