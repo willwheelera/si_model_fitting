@@ -77,6 +77,7 @@ def extract(data):
   output = dict(en=en, enerr=enerr, dm=dm, dmerr=dmerr, 
                 enderiv=enderiv, enderiverr=enderiverr, 
                 dmderiv=dmderiv, dmderiverr=dmderiverr,
+                dpwf=dpwf, dpen=dpen, dpdm=dpdm,
                 dpwferr=dpwferr, dpenerr=dpenerr, dpdmerr=dpdmerr)
   return output
 
@@ -356,7 +357,7 @@ if __name__=='__main__':
   
   print('trace', np.trace(dm[0], axis1=1, axis2=2))
   
-  if False: ## Plot data 
+  if True: ## Plot data 
     # Plot energy
     plot_energy(en[deriv], enerr[deriv], deriv=deriv, titlestr=qmcstr+derivstr)
     plt.savefig('{0}{1}{2}_energy.pdf'.format(qmcstr,derivstr,label), bbox_inches='tight')
