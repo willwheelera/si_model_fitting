@@ -6,6 +6,7 @@ sys.path.append('../')
 import pyblock
 import time
 import matplotlib.pyplot as plt
+import json
 
 def gather_json_df(jsonfn):
   ''' 
@@ -39,7 +40,7 @@ def gather_json_df(jsonfn):
     for blockstr in jsonf.read().split("<RS>"):
      # print(blockstr)
       if '{' in blockstr:
-        block=loads(blockstr.replace("inf","0"))['properties']
+        block = json.loads(blockstr.replace("inf","0"))['properties']
         blockdict['energy'].append(block['total_energy']['value'][0])
         blockdict['dpenergy'].append(block['derivative_dm']['dpenergy']['vals'])
         blockdict['dpwf'].append(block['derivative_dm']['dpwf']['vals'])
@@ -71,7 +72,7 @@ def gather_json_df(jsonfn):
     avec = np.array(vec)
     meshinds = np.meshgrid(*list(map(np.arange,avec.shape)))
     indices = list(zip(*list(map(np.ravel,meshinds))))
-    dat = Series(dict(zip([key+'_'+'_'.join(map(str,i)) for i in indices], avec.ravel())))
+    dat = pd.Series(dict(zip([key+'_'+'_'.join(map(str,i)) for i in indices], avec.ravel())))
     #indices=range(len(vec))
     #dat=Series(dict(zip([key+'%d'%i for i in indices],vec)))
     return dat
@@ -83,7 +84,7 @@ def gather_json_df(jsonfn):
   print('dict loaded from jsons')
   if has_tbdm:
     blockdict.update(tbdmdict)
-  blockdf=DataFrame(blockdict)
+  blockdf = pd.DataFrame(blockdict)
   for key in blockdict.keys():
     if key=='energy': continue
     blockdf = lists_to_cols(blockdf, key)
