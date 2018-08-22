@@ -187,7 +187,7 @@ def symmetrize_obdm(blockdf):
         blockdf['obdm_{0}_{1}_{2}'.format(spin,o1,o2)] += \
             blockdf['obdm_{0}_{2}_{1}'.format(spin,o1,o2)] 
         for p in range(nparams):
-          blockdf['dpobdm_{0}_{1}_{2}_{3}'.format(spin,p,o1,o2)] += \ 
+          blockdf['dpobdm_{0}_{1}_{2}_{3}'.format(spin,p,o1,o2)] += \
               blockdf['dpobdm_{0}_{1}_{3}_{2}'.format(spin,p,o1,o2)] 
   blockdf = blockdf.drop(['obdm_{0}_{2}_{1}'.format(spin,o1,o2) \
       for spin in ['up','down'] for o1 in range(norb) for o2 in range(o1)], axis=1)
