@@ -217,15 +217,11 @@ def bootstrap(df, nresamples):
         words = col.split('_')
         words.insert(2,'%i')
       name = '_'.join(words)
-      funclist.append( rsmeans[['dp'+name%p for p in range(nparams)]] -\
-                       rsmeans[col][np.newaxis] *\
-                       rsmeans[['dpwf_%i'%p for p in range(nparams)]].values) 
-    resamples.append(pd.concat(funclist, axis=0))
+      rsmeans[['dp'+name%p for p in range(nparams)]]-=\
+        rsmeans[col][np.newaxis] *\
+        rsmeans[['dpwf_%i'%p for p in range(nparams)]].values
+    resamples.append(rsmeans)
   rsdf = pd.concat(resamples, axis=1).T
-  #stats = pd.DataFrame(
-  #            pd.concat([rsdf.mean(axis=0), rsdf.std(axis=0)], 
-  #                axis=0, ignore_index=True), 
-  #            index=['mean','serr'])
   return rsdf 
 
 def get_deriv_estimate(fname, nbootstrap_samples=100):
@@ -237,7 +233,7 @@ def get_deriv_estimate(fname, nbootstrap_samples=100):
   return rsdf.mean(), rsdf.std()
 
 def get_gsw(fname):
-  with open(fname.split('.')[0]+'.slater','r') as f:
+  with open(fname.split('.')[0]+'.'+fname.split('.')[1]+'.slater','r') as f:
     filestr = f.read()
     ind = filestr.find('DETWT')
     words = filestr[ind:ind+100].split()
@@ -282,4 +278,3 @@ if __name__=='__main__':
   g = sns.FacetGrid(df[inds], col='deriv', col_wrap=5, sharey=False)
   g.map(plt.errorbar, 'gsw', 'value', 'err', ls='')
   plt.show()
-
