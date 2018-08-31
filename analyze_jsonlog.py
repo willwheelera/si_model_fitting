@@ -21,10 +21,10 @@ def gather_json_df(jsonfn):
       'energy':[],
       'dpenergy':[],
       'dpwf':[],
-      'obdm_up':[],
-      'obdm_down':[],
-      'dpobdm_up':[],
-      'dpobdm_down':[],
+      #'obdm_up':[],
+      #'obdm_down':[],
+      #'dpobdm_up':[],
+      #'dpobdm_down':[],
   }
   tbdmdict={
       'tbdm_upup':[],
@@ -44,16 +44,16 @@ def gather_json_df(jsonfn):
         blockdict['energy'].append(block['total_energy']['value'][0])
         blockdict['dpenergy'].append(block['derivative_dm']['dpenergy']['vals'])
         blockdict['dpwf'].append(block['derivative_dm']['dpwf']['vals'])
-        for s in ['up','down']:
-          blockdict['obdm_%s'%s].append(block['derivative_dm']['tbdm']['obdm'][s])
-          dprdmlist = [dprdm['tbdm']['obdm'][s] for dprdm in block['derivative_dm']['dprdm']]
-          blockdict['dpobdm_%s'%s].append(dprdmlist)
+        #for s in ['up','down']:
+        #  blockdict['obdm_%s'%s].append(block['derivative_dm']['tbdm']['obdm'][s])
+        #  dprdmlist = [dprdm['tbdm']['obdm'][s] for dprdm in block['derivative_dm']['dprdm']]
+        #  blockdict['dpobdm_%s'%s].append(dprdmlist)
         has_tbdm = 'tbdm' in block['derivative_dm']['tbdm']
-        if has_tbdm:
-          for s in ['upup','updown','downup','downdown']:
-            tbdmdict['tbdm_%s'%s].append(block['derivative_dm']['tbdm']['tbdm'][s])
-            dprdmlist = [dprdm['tbdm']['tbdm'][s] for dprdm in block['derivative_dm']['dprdm']]
-            tbdmdict['dptbdm_%s'%s].append(dprdmlist)
+        #if has_tbdm:
+        #  for s in ['upup','updown','downup','downdown']:
+        #    tbdmdict['tbdm_%s'%s].append(block['derivative_dm']['tbdm']['tbdm'][s])
+        #    dprdmlist = [dprdm['tbdm']['tbdm'][s] for dprdm in block['derivative_dm']['dprdm']]
+        #    tbdmdict['dptbdm_%s'%s].append(dprdmlist)
         #  tmptbdm = {'dptbdm_upup':[],'dptbdm_updown':[],'dptbdm_downup':[],'dptbdm_downdown':[]}
         #tmpobdm = {'dpobdm_up':[],'dpobdm_down':[]}
         #for p,dprdm in enumerate(block['derivative_dm']['dprdm']):
@@ -218,19 +218,14 @@ def bootstrap(df, nresamples):
         words = col.split('_')
         words.insert(2,'%i')
       name = '_'.join(words)
-      funclist.append( rsmeans[['dp'+name%p for p in range(nparams)]] -\
-                       rsmeans[col][np.newaxis] *\
-                       rsmeans[['dpwf_%i'%p for p in range(nparams)]].values) 
-    resamples.append(pd.concat(funclist, axis=0))
+      rsmeans[['dp'+name%p for p in range(nparams)]]-=\
+        rsmeans[col][np.newaxis] *\
+        rsmeans[['dpwf_%i'%p for p in range(nparams)]].values
+    resamples.append(rsmeans)
   rsdf = pd.concat(resamples, axis=1).T
-  #stats = pd.DataFrame(
-  #            pd.concat([rsdf.mean(axis=0), rsdf.std(axis=0)], 
-  #                axis=0, ignore_index=True), 
-  #            index=['mean','serr'])
   return rsdf 
 
-def get_deriv_estimate(fname, nbootstrap_samples=100):
-  blockdf = gather_json_df(fname) 
+def get_deriv_estimate(blockdf, nbootstrap_samples=100):
   symmetrize_obdm(blockdf) 
   blockdf = reblock(blockdf, 2) 
   rsdf = bootstrap(blockdf, nbootstrap_samples)
@@ -238,7 +233,7 @@ def get_deriv_estimate(fname, nbootstrap_samples=100):
   return rsdf.mean(), rsdf.std()
 
 def get_gsw(fname):
-  with open(fname.split('.')[0]+'.slater','r') as f:
+  with open(fname.split('.')[0]+'.'+fname.split('.')[1]+'.slater','r') as f:
     filestr = f.read()
     ind = filestr.find('DETWT')
     words = filestr[ind:ind+100].split()
@@ -256,7 +251,8 @@ def compute_and_save(fnames, save_name='saved_data.csv'):
   dfs = []
   for fname in fnames:
     gsw = get_gsw(fname)
-    mean, std = get_deriv_estimate(fname, nbootstrap_samples=100)
+    blockdf=gather_json_df(fname)
+    mean, std = get_deriv_estimate(blockdf, nbootstrap_samples=100)
     df = pd.DataFrame({'gsw':[gsw]*len(mean),
                        'filename':[fname]*len(mean),
                        'deriv':mean.index,
@@ -283,4 +279,3 @@ if __name__=='__main__':
   g = sns.FacetGrid(df[inds], col='deriv', col_wrap=5, sharey=False)
   g.map(plt.errorbar, 'gsw', 'value', 'err', ls='')
   plt.show()
-
