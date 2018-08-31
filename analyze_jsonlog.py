@@ -195,6 +195,7 @@ def symmetrize_obdm(blockdf):
   blockdf = blockdf.drop(['dpobdm_{0}_{1}_{3}_{2}'.format(spin,p,o1,o2) \
       for spin in ['up','down'] for p in range(nparams) for o1 in range(norb) for o2 in range(o1)], axis=1) 
   print('newcols', len(blockdf.columns), time.time()-start)
+  return blockdf
 
 def bootstrap(df, nresamples):
   cols = df.columns
