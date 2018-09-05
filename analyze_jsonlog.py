@@ -53,13 +53,6 @@ def gather_json_df(jsonfn):
             dprdmlist = [dprdm['tbdm']['obdm'][s] for dprdm in block['derivative_dm']['dprdm']]
             obdmdict['dpobdm_%s'%s].append(dprdmlist) 
 
-          tmpobdm = {'dpobdm_up':[],'dpobdm_down':[]}
-          for p,dprdm in enumerate(block['derivative_dm']['dprdm']):
-            for s in ['up','down']:
-              tmpobdm['dpobdm_%s'%s].append(dprdm['tbdm']['obdm'][s])
-          for key,value in tmpobdm.items():
-            obdmdict[key].append(value)
-
         has_tbdm = 'tbdm' in block['derivative_dm']['tbdm']
         if has_tbdm:
           for s in ['upup','updown','downup','downdown']:
@@ -67,23 +60,16 @@ def gather_json_df(jsonfn):
             dprdmlist = [dprdm['tbdm']['tbdm'][s] for dprdm in block['derivative_dm']['dprdm']]
             tbdmdict['dptbdm_%s'%s].append(dprdmlist)
 
-          tmptbdm = {'dptbdm_upup':[],'dptbdm_updown':[],'dptbdm_downup':[],'dptbdm_downdown':[]}
-          for p,dprdm in enumerate(block['derivative_dm']['dprdm']):
-            for s in ['upup','updown','downup','downdown']:
-              tmptbdm['dptbdm_%s'%s].append(dprdm['tbdm']['tbdm'][s])
-          for key,value in tmptbdm.items():
-            tbdmdict[key].append(value)
-        
   def unpack(vec,key):
+    # expand vector of arrays into series labeled by index
     avec = np.array(vec)
     meshinds = np.meshgrid(*list(map(np.arange,avec.shape)))
     indices = list(zip(*list(map(np.ravel,meshinds))))
     dat = pd.Series(dict(zip([key+'_'+'_'.join(map(str,i)) for i in indices], avec.ravel())))
-    #indices=range(len(vec))
-    #dat=Series(dict(zip([key+'%d'%i for i in indices],vec)))
     return dat
 
   def lists_to_cols(blockdf, key):
+    # expand columns of arrays into separate columns labeled by index and remove original cols
     expanded_cols = blockdf[key].apply(lambda x:unpack(x,key=key))
     return blockdf.join(expanded_cols).drop(key,axis=1)
 
