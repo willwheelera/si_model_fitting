@@ -21,6 +21,8 @@ def gather_json_df(jsonfn):
       'energy':[],
       'dpenergy':[],
       'dpwf':[],
+  }
+  obdmdict={
       'obdm_up':[],
       'obdm_down':[],
       'dpobdm_up':[],
@@ -43,29 +45,34 @@ def gather_json_df(jsonfn):
         blockdict['energy'].append(block['total_energy']['value'][0])
         blockdict['dpenergy'].append(block['derivative_dm']['dpenergy']['vals'])
         blockdict['dpwf'].append(block['derivative_dm']['dpwf']['vals'])
-        for s in ['up','down']:
-          blockdict['obdm_%s'%s].append(block['derivative_dm']['tbdm']['obdm'][s])
-          dprdmlist = [dprdm['tbdm']['obdm'][s] for dprdm in block['derivative_dm']['dprdm']]
-          blockdict['dpobdm_%s'%s].append(dprdmlist)
+
+        has_obdm = 'obdm' in block['derivative_dm']['tbdm']
+        if has_obdm: 
+          for s in ['up','down']:
+            obdmdict['obdm_%s'%s].append(block['derivative_dm']['tbdm']['obdm'][s])
+            dprdmlist = [dprdm['tbdm']['obdm'][s] for dprdm in block['derivative_dm']['dprdm']]
+            obdmdict['dpobdm_%s'%s].append(dprdmlist) 
+
+          tmpobdm = {'dpobdm_up':[],'dpobdm_down':[]}
+          for p,dprdm in enumerate(block['derivative_dm']['dprdm']):
+            for s in ['up','down']:
+              tmpobdm['dpobdm_%s'%s].append(dprdm['tbdm']['obdm'][s])
+          for key,value in tmpobdm.items():
+            obdmdict[key].append(value)
+
         has_tbdm = 'tbdm' in block['derivative_dm']['tbdm']
         if has_tbdm:
           for s in ['upup','updown','downup','downdown']:
             tbdmdict['tbdm_%s'%s].append(block['derivative_dm']['tbdm']['tbdm'][s])
             dprdmlist = [dprdm['tbdm']['tbdm'][s] for dprdm in block['derivative_dm']['dprdm']]
             tbdmdict['dptbdm_%s'%s].append(dprdmlist)
+
           tmptbdm = {'dptbdm_upup':[],'dptbdm_updown':[],'dptbdm_downup':[],'dptbdm_downdown':[]}
-        tmpobdm = {'dpobdm_up':[],'dpobdm_down':[]}
-        for p,dprdm in enumerate(block['derivative_dm']['dprdm']):
-          for s in ['up','down']:
-            tmpobdm['dpobdm_%s'%s].append(dprdm['tbdm']['obdm'][s])
-          if has_tbdm:
+          for p,dprdm in enumerate(block['derivative_dm']['dprdm']):
             for s in ['upup','updown','downup','downdown']:
               tmptbdm['dptbdm_%s'%s].append(dprdm['tbdm']['tbdm'][s])
-        for key,value in tmpobdm.items():
-          blockdict[key].append(value)
-        if has_tbdm:
           for key,value in tmptbdm.items():
-            blockdict[key].append(value)
+            tbdmdict[key].append(value)
         
   def unpack(vec,key):
     avec = np.array(vec)
@@ -81,6 +88,8 @@ def gather_json_df(jsonfn):
     return blockdf.join(expanded_cols).drop(key,axis=1)
 
   print('dict loaded from jsons')
+  if has_obdm:
+    blockdict.update(obdmdict)
   if has_tbdm:
     blockdict.update(tbdmdict)
   blockdf = pd.DataFrame(blockdict)
@@ -100,8 +109,10 @@ def reblock(df, n):
 
 def opt_block(df):
   """
+  Finds optimal block size for each variable in a dataset
   df is a dataframe where each row is a sample and each column is a calculated quantity
   reblock each column over samples to find the best block size
+  Returns optimal_block, a 1D array with the optimal size for each column in df
   """
   stats = dict(
       serr = [],
@@ -134,6 +145,10 @@ def opt_block(df):
   return optimal_block
 
 def test_reblock(blockdf):
+  '''
+  Computes optimal blocks and compares across variables, and with pyblock
+  Just for testing
+  '''
   start = time.time()
   optimal_block = opt_block(blockdf)
   print('found optimal block', time.time()-start)
@@ -150,9 +165,6 @@ def test_reblock(blockdf):
   pyblock.plot.plot_reblocking(block_info)
   print(opt_block)
 
-  plt.plot(optimal_block)
-  plt.show(); quit()
-
   print('block_info')
   print(data_len)
   print(block_info)
@@ -160,7 +172,15 @@ def test_reblock(blockdf):
   print('summary')
   print(summary)
 
+  plt.plot(optimal_block)
+  plt.show()
+
 def symmetrize_obdm(blockdf):
+  '''
+  Symmetrizes 1RDM since t_ij=t_ji, and removes duplicate from the dataframe
+  For RDM derivatives, the values will not be correct until added together
+  Returns new dataframe with only the unique RDM elements (lower triangular part)
+  '''
   cols = blockdf.columns
   norb = np.count_nonzero([c.startswith('obdm_up_0') for c in cols])
   nparams = np.count_nonzero([c.startswith('dpenergy') for c in cols])
@@ -187,6 +207,10 @@ def symmetrize_obdm(blockdf):
   return blockdf
 
 def bootstrap(df, nresamples):
+  '''
+  Bootstrap to get errors on E, rdm, dE/dp, and dRDM/dp
+  df is a pandas DataFrame as loaded by gather_json_df(); should be obdm symmetrized
+  '''
   cols = df.columns
   norb = np.count_nonzero([c.startswith('obdm_up_0') for c in cols])
   nparams = np.count_nonzero([c.startswith('dpenergy') for c in cols])
