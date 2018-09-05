@@ -87,8 +87,6 @@ def gather_json_df(jsonfn):
   for key in blockdict.keys():
     if key=='energy': continue
     blockdf = lists_to_cols(blockdf, key)
-  #blockdf=blockdf.join(blockdf['dpenergy'].apply(lambda x:unpack(x,key='dpenergy'))).drop('dpenergy',axis=1)
-  #blockdf=blockdf.join(blockdf['dpwf'].apply(lambda x:unpack(x,key='dpwf'))).drop('dpwf',axis=1)
   print('reshaped columns')
   return blockdf
 
@@ -121,10 +119,6 @@ def opt_block(df):
     serr = newdf.sem(axis=0).values
     serrerr = serr/(2*(newdf.shape[0]-1))**.5
     statslist.append((iblock, serr.copy()))
-    #stats.append(dict(serr=serr, serrerr=serrerr, iblock=iblock))
-    #B3 = 2**(3*iblock)
-    #inds = np.where(B3 > 2*ndata*(serr/serr0)**4)[0]
-    #optimal_block[inds] = iblock
 
     n = newdf.shape[0]
     print(iblock, n)
@@ -150,8 +144,6 @@ def test_reblock(blockdf):
   bigopt4 = blockdf.columns[np.where(np.logical_and(optimal_block==4,blockdf.mean(axis=0)>.05))[0]]
   print(np.where(np.isin(opt4,bigopt4))[0])
   print(bigopt4)
-  #plt.plot(blockdf[opt4].mean(axis=0).values)
-  #plt.show(); quit()
 
   datalen, block_info, covariance = pyblock.pd_utils.reblock(blockdf[bigopt4])
   opt_block = pyblock.pd_utils.optimal_block(block_info)
@@ -175,8 +167,6 @@ def symmetrize_obdm(blockdf):
   print('orbs',norb,'params',nparams)
 
   print(blockdf.shape)
-  #nparams = len(blockdict['dpenergy'])
-  #norb = len(blockdict['obdm']['up'])
 
   start=time.time()
   print('starting ij+ji combination')
@@ -202,7 +192,6 @@ def bootstrap(df, nresamples):
   nparams = np.count_nonzero([c.startswith('dpenergy') for c in cols])
   nsamples = len(df[cols[0]])
   names = [c for c in cols if not c.startswith('dp')]
-  #rsdf = {'ddp_%s_%i'%(n,p):[] for n in names for p in range(nparams)}
   resamples = []
   start = time.time()
   for rs in range(nresamples):
@@ -228,7 +217,6 @@ def get_deriv_estimate(blockdf, nbootstrap_samples=100):
   symmetrize_obdm(blockdf) 
   blockdf = reblock(blockdf, 2) 
   rsdf = bootstrap(blockdf, nbootstrap_samples)
-  #print(pd.concat([rsdf.mean(axis=0),rsdf.std(axis=0)],axis=1, ignore_index=True).T)
   return rsdf.mean(), rsdf.std()
 
 def get_gsw(fname):
