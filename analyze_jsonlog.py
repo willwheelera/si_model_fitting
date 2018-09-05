@@ -21,10 +21,10 @@ def gather_json_df(jsonfn):
       'energy':[],
       'dpenergy':[],
       'dpwf':[],
-      #'obdm_up':[],
-      #'obdm_down':[],
-      #'dpobdm_up':[],
-      #'dpobdm_down':[],
+      'obdm_up':[],
+      'obdm_down':[],
+      'dpobdm_up':[],
+      'dpobdm_down':[],
   }
   tbdmdict={
       'tbdm_upup':[],
@@ -38,35 +38,34 @@ def gather_json_df(jsonfn):
   }
   with open(jsonfn) as jsonf:
     for blockstr in jsonf.read().split("<RS>"):
-     # print(blockstr)
       if '{' in blockstr:
         block = json.loads(blockstr.replace("inf","0"))['properties']
         blockdict['energy'].append(block['total_energy']['value'][0])
         blockdict['dpenergy'].append(block['derivative_dm']['dpenergy']['vals'])
         blockdict['dpwf'].append(block['derivative_dm']['dpwf']['vals'])
-        #for s in ['up','down']:
-        #  blockdict['obdm_%s'%s].append(block['derivative_dm']['tbdm']['obdm'][s])
-        #  dprdmlist = [dprdm['tbdm']['obdm'][s] for dprdm in block['derivative_dm']['dprdm']]
-        #  blockdict['dpobdm_%s'%s].append(dprdmlist)
+        for s in ['up','down']:
+          blockdict['obdm_%s'%s].append(block['derivative_dm']['tbdm']['obdm'][s])
+          dprdmlist = [dprdm['tbdm']['obdm'][s] for dprdm in block['derivative_dm']['dprdm']]
+          blockdict['dpobdm_%s'%s].append(dprdmlist)
         has_tbdm = 'tbdm' in block['derivative_dm']['tbdm']
-        #if has_tbdm:
-        #  for s in ['upup','updown','downup','downdown']:
-        #    tbdmdict['tbdm_%s'%s].append(block['derivative_dm']['tbdm']['tbdm'][s])
-        #    dprdmlist = [dprdm['tbdm']['tbdm'][s] for dprdm in block['derivative_dm']['dprdm']]
-        #    tbdmdict['dptbdm_%s'%s].append(dprdmlist)
-        #  tmptbdm = {'dptbdm_upup':[],'dptbdm_updown':[],'dptbdm_downup':[],'dptbdm_downdown':[]}
-        #tmpobdm = {'dpobdm_up':[],'dpobdm_down':[]}
-        #for p,dprdm in enumerate(block['derivative_dm']['dprdm']):
-        #  for s in ['up','down']:
-        #    tmpobdm['dpobdm_%s'%s].append(dprdm['tbdm']['obdm'][s])
-        #  if has_tbdm:
-        #    for s in ['upup','updown','downup','downdown']:
-        #      tmptbdm['dptbdm_%s'%s].append(dprdm['tbdm']['tbdm'][s])
-        #for key,value in tmpobdm.items():
-        #  blockdict[key].append(value)
-        #if has_tbdm:
-        #  for key,value in tmptbdm.items():
-        #    blockdict[key].append(value)
+        if has_tbdm:
+          for s in ['upup','updown','downup','downdown']:
+            tbdmdict['tbdm_%s'%s].append(block['derivative_dm']['tbdm']['tbdm'][s])
+            dprdmlist = [dprdm['tbdm']['tbdm'][s] for dprdm in block['derivative_dm']['dprdm']]
+            tbdmdict['dptbdm_%s'%s].append(dprdmlist)
+          tmptbdm = {'dptbdm_upup':[],'dptbdm_updown':[],'dptbdm_downup':[],'dptbdm_downdown':[]}
+        tmpobdm = {'dpobdm_up':[],'dpobdm_down':[]}
+        for p,dprdm in enumerate(block['derivative_dm']['dprdm']):
+          for s in ['up','down']:
+            tmpobdm['dpobdm_%s'%s].append(dprdm['tbdm']['obdm'][s])
+          if has_tbdm:
+            for s in ['upup','updown','downup','downdown']:
+              tmptbdm['dptbdm_%s'%s].append(dprdm['tbdm']['tbdm'][s])
+        for key,value in tmpobdm.items():
+          blockdict[key].append(value)
+        if has_tbdm:
+          for key,value in tmptbdm.items():
+            blockdict[key].append(value)
         
   def unpack(vec,key):
     avec = np.array(vec)
