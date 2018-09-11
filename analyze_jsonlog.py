@@ -10,8 +10,6 @@ import json
 
 def gather_json_df(jsonfn):
   ''' 
-  Computing covariance is as easy as gather_json('my.json').cov()
-
   Args:
     jsonfn (str): name of json file to read.
   Returns:
@@ -100,13 +98,9 @@ def opt_block(df):
   reblock each column over samples to find the best block size
   Returns optimal_block, a 1D array with the optimal size for each column in df
   """
-  stats = dict(
-      serr = [],
-      serrerr = [])
   newdf = df.copy()
   iblock = 0
-  ndata = df.shape[0]
-  nvariables = df.shape[1]
+  ndata, nvariables = tuple(df.shape[:2])
   optimal_block = np.array([float('NaN')]*nvariables)
   serr0 = df.sem(axis=0).values
   print('serr0.shape',serr0.shape)
