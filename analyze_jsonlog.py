@@ -25,6 +25,7 @@ def gather_json_df(jsonfn):
       'obdm_down':[],
       'dpobdm_up':[],
       'dpobdm_down':[],
+      'normalization':[],
   }
   tbdmdict={
       'tbdm_upup':[],
@@ -36,6 +37,7 @@ def gather_json_df(jsonfn):
       'dptbdm_downup':[],
       'dptbdm_downdown':[],
   }
+  states = None
   with open(jsonfn) as jsonf:
     for blockstr in jsonf.read().split("<RS>"):
       if '{' in blockstr:
@@ -44,12 +46,17 @@ def gather_json_df(jsonfn):
         blockdict['dpenergy'].append(block['derivative_dm']['dpenergy']['vals'])
         blockdict['dpwf'].append(block['derivative_dm']['dpwf']['vals'])
 
-        has_obdm = 'obdm' in block['derivative_dm']['tbdm']
+        if not 'tbdm' in block['derivative_dm']:
+          continue
+              
+        has_obdm =  'obdm' in block['derivative_dm']['tbdm']
         if has_obdm: 
           for s in ['up','down']:
             obdmdict['obdm_%s'%s].append(block['derivative_dm']['tbdm']['obdm'][s])
             dprdmlist = [dprdm['tbdm']['obdm'][s] for dprdm in block['derivative_dm']['dprdm']]
             obdmdict['dpobdm_%s'%s].append(dprdmlist) 
+          obdm['normalization'].append(block['derivative_dm']['tbdm']['normalization']['value']
+          states = block['derivative_dm']['tbdm']['states']
 
         has_tbdm = 'tbdm' in block['derivative_dm']['tbdm']
         if has_tbdm:
@@ -58,17 +65,22 @@ def gather_json_df(jsonfn):
             dprdmlist = [dprdm['tbdm']['tbdm'][s] for dprdm in block['derivative_dm']['dprdm']]
             tbdmdict['dptbdm_%s'%s].append(dprdmlist)
 
-  def unpack(vec,key):
+  def unpack(vec,key,states=None):
     # expand vector of arrays into series labeled by index
     avec = np.array(vec)
     meshinds = np.meshgrid(*list(map(np.arange,avec.shape)))
-    indices = list(zip(*list(map(np.ravel,meshinds))))
-    dat = pd.Series(dict(zip([key+'_'+'_'.join(map(str,i)) for i in indices], avec.ravel())))
+    if states is not None and (key.find('bdm')>0 or key=='normalization'):
+      if not key.startswith('dp'):
+        meshinds[0] = states[meshinds[0]]
+      for i in range(1,len(meshinds)):
+        meshinds[i] = states[meshinds[i]] 
+    labels = list(zip(*list(map(np.ravel,meshinds))))
+    dat = pd.Series(dict(zip([key+'_'+'_'.join(map(str,i)) for i in labels], avec.ravel())))
     return dat
 
-  def lists_to_cols(blockdf, key):
+  def lists_to_cols(blockdf, key, states=None):
     # expand columns of arrays into separate columns labeled by index and remove original cols
-    expanded_cols = blockdf[key].apply(lambda x:unpack(x,key=key))
+    expanded_cols = blockdf[key].apply(lambda x:unpack(x,key=key,states=states))
     return blockdf.join(expanded_cols).drop(key,axis=1)
 
   print('dict loaded from jsons')
@@ -78,17 +90,45 @@ def gather_json_df(jsonfn):
     blockdict.update(tbdmdict)
   blockdf = pd.DataFrame(blockdict)
   for key in blockdict.keys():
-    if key=='energy': continue
-    blockdf = lists_to_cols(blockdf, key)
+    if key in ['energy', 'states']: continue
+    blockdf = lists_to_cols(blockdf, key, states=states)
   print('reshaped columns')
   return blockdf
 
+def undo_normalizations(df):
+  states = [int(key.split('_')[1]) for key in df.columns if key.startswith('normalization')]
+  nmo = len(states)
+  nparams = np.count_nonzero([c.startswith('dpenergy') for c in df.columns])
+  symmetrized = np.count_nonzero([c.startswith('obdm_up') for c in df.columns])==nmo*(nmo+1)/2
+  for i in range(nmo):
+    for j in range(i+1 if symmetrized else nmo):
+      norm_ij = np.sqrt(df['normalization_%i'%i]*df['normalization_%i'%j])
+      for spin in ['up','down']:
+        df['obdm_{0}_{1}_{2}'.format(spin,i,j)] *= norm_ij
+        for p in range(nparams):
+          df['dpobdm_{0}_{1}_{2}_{3}'.format(spin,p,i,j)] *= norm_ij
+
+def apply_normalizations(df):
+  states = [int(key.split('_')[1]) for key in df.columns if key.startswith('normalization')]
+  nmo = len(states)
+  nparams = np.count_nonzero([c.startswith('dpenergy') for c in df.columns])
+  symmetrized = np.count_nonzero([c.startswith('obdm_up') for c in df.columns])==nmo*(nmo+1)/2
+  for i in range(nmo):
+    for j in range(i+1 if symmetrized else nmo):
+      norm_ij = np.sqrt(df['normalization_%i'%i]*df['normalization_%i'%j])
+      for spin in ['up','down']:
+        df['obdm{0}_{1}_{2}'.format(spin,i,j)] /= norm_ij
+        for p in range(nparams):
+          df['dpobdm{0}_{1}_{2}_{3}'.format(spin,p,i,j)] /= norm_ij
+
 def reblock(df, n):
   newdf = df.copy()
+  undo_normalizations(newdf)
   for i in range(n):
     m = newdf.shape[0]
     lasteven = m - int(m%2==1)
     newdf = (newdf[:lasteven:2]+newdf[1::2].values)/2
+  apply_normalizations(newdf)
   return newdf
 
 def opt_block(df):
@@ -99,6 +139,7 @@ def opt_block(df):
   Returns optimal_block, a 1D array with the optimal size for each column in df
   """
   newdf = df.copy()
+  undo_normalizations(newdf)
   iblock = 0
   ndata, nvariables = tuple(df.shape[:2])
   optimal_block = np.array([float('NaN')]*nvariables)
