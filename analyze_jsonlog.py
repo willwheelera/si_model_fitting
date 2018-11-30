@@ -8,7 +8,7 @@ import time
 import matplotlib.pyplot as plt
 import json
 
-def gather_json_df(jsonfn):
+def gather_json_df(jsonfn, leave_as_matrices=False):
   ''' 
   Args:
     jsonfn (str): name of json file to read.
@@ -55,7 +55,7 @@ def gather_json_df(jsonfn):
             obdmdict['obdm_%s'%s].append(block['derivative_dm']['tbdm']['obdm'][s])
             dprdmlist = [dprdm['tbdm']['obdm'][s] for dprdm in block['derivative_dm']['dprdm']]
             obdmdict['dpobdm_%s'%s].append(dprdmlist) 
-          obdm['normalization'].append(block['derivative_dm']['tbdm']['normalization']['value']
+          obdmdict['normalization'].append(block['derivative_dm']['tbdm']['normalization']['value'])
           states = block['derivative_dm']['tbdm']['states']
 
         has_tbdm = 'tbdm' in block['derivative_dm']['tbdm']
@@ -64,7 +64,17 @@ def gather_json_df(jsonfn):
             tbdmdict['tbdm_%s'%s].append(block['derivative_dm']['tbdm']['tbdm'][s])
             dprdmlist = [dprdm['tbdm']['tbdm'][s] for dprdm in block['derivative_dm']['dprdm']]
             tbdmdict['dptbdm_%s'%s].append(dprdmlist)
+  print('dict loaded from jsons')
+  if has_obdm:
+    blockdict.update(obdmdict)
+  if has_tbdm:
+    blockdict.update(tbdmdict)
+  blockdf = pd.DataFrame(blockdict)
+  if not leave_as_matrices:
+    blockdf=unpack_matrices(blockdf, states=states)
+  return blockdf
 
+def unpack_matrices(df, states=None):
   def unpack(vec,key,states=None):
     # expand vector of arrays into series labeled by index
     avec = np.array(vec)
@@ -83,13 +93,7 @@ def gather_json_df(jsonfn):
     expanded_cols = blockdf[key].apply(lambda x:unpack(x,key=key,states=states))
     return blockdf.join(expanded_cols).drop(key,axis=1)
 
-  print('dict loaded from jsons')
-  if has_obdm:
-    blockdict.update(obdmdict)
-  if has_tbdm:
-    blockdict.update(tbdmdict)
-  blockdf = pd.DataFrame(blockdict)
-  for key in blockdict.keys():
+  for key in blockdf.keys():
     if key in ['energy', 'states']: continue
     blockdf = lists_to_cols(blockdf, key, states=states)
   print('reshaped columns')
@@ -226,6 +230,27 @@ def symmetrize_obdm(blockdf):
       for spin in ['up','down'] for p in range(nparams) for o1 in range(norb) for o2 in range(o1)], axis=1) 
   print('newcols', len(blockdf.columns), time.time()-start)
   return blockdf
+
+def symmetrize_by_1body_h(blockdf, h):
+  h = 0.5*(h+h.T)
+  unique, index = np.unique(h, return_index=True)
+  for u in unique:
+    inds = list(zip(*np.where(h==u)))
+    i0 = inds[0]
+    for spin in ['up','down']:
+      for i in inds[1:]:
+        blockdf['obdm_{0}_{1}_{2}'.format(spin, *i0)] += \
+            blockdf['obdm_{0}_{1}_{2}'.format(spin, *i)] += \
+        for p in range(nparams):
+          blockdf['dpobdm_{0}_{1}_{2}_{3}'.format(spin,p,*i0)] += \
+              blockdf['dpobdm_{0}_{1}_{2}_{3}'.format(spin,p,*i)] 
+    blockdf = blockdf.drop(['obdm_{0}_{1}_{2}'.format(spin,*i) \
+        for spin in ['up','down'] for i in inds[1:]], axis=1)
+    blockdf = blockdf.drop(['dpobdm_{0}_{1}_{2}_{3}'.format(spin,p,*i) \
+        for spin in ['up','down'] for p in range(nparams) for i in inds[1:]], axis=1) 
+  print('newcols', len(blockdf.columns), time.time()-start)
+  return blockdf
+  
 
 def bootstrap(df, nresamples):
   '''
