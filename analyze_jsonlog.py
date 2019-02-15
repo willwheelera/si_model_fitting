@@ -146,7 +146,7 @@ def unpack_matrices(df, states=None):
   print('reshaped columns')
   return blockdf
 
-def undo_normalizations(df):
+def undo_normalizations(df): # for reblocking
   states = [int(key.split('_')[1]) for key in df.columns if key.startswith('normalization')]
   nmo = len(states)
   nparams = np.count_nonzero([c.startswith('dpenergy') for c in df.columns])
@@ -161,7 +161,7 @@ def undo_normalizations(df):
         for p in range(nparams):
           df['dpobdm_{0}_{1}_{2}_{3}'.format(spin,p,si,sj)] *= norm_ij
 
-def apply_normalizations(df):
+def apply_normalizations(df): # after reblocking
   states = [int(key.split('_')[1]) for key in df.columns if key.startswith('normalization')]
   nmo = len(states)
   nparams = np.count_nonzero([c.startswith('dpenergy') for c in df.columns])
@@ -365,6 +365,7 @@ def extrapolate_bootstrap(dfdmc01, dfdmc, dfvmc, nresamples=100, obdm_degen=None
              #-dfvmc.sample(n=len(dfvmc), replace=True, axis=0).mean(axis=0).values
 
     for col in names:
+      if col.startswith('normalization'): continue
       if col=='energy':
         words = [col,'%i']
       else:
