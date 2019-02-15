@@ -99,7 +99,7 @@ def unpack_matrices(df, states=None):
   print('reshaped columns')
   return blockdf
 
-def undo_normalizations(df):
+def undo_normalizations(df): # for reblocking
   states = [int(key.split('_')[1]) for key in df.columns if key.startswith('normalization')]
   nmo = len(states)
   nparams = np.count_nonzero([c.startswith('dpenergy') for c in df.columns])
@@ -112,7 +112,7 @@ def undo_normalizations(df):
         for p in range(nparams):
           df['dpobdm_{0}_{1}_{2}_{3}'.format(spin,p,i,j)] *= norm_ij
 
-def apply_normalizations(df):
+def apply_normalizations(df): # after reblocking
   states = [int(key.split('_')[1]) for key in df.columns if key.startswith('normalization')]
   nmo = len(states)
   nparams = np.count_nonzero([c.startswith('dpenergy') for c in df.columns])
@@ -258,7 +258,6 @@ def bootstrap(df, nresamples):
   df is a pandas DataFrame as loaded by gather_json_df(); should be obdm symmetrized
   '''
   cols = df.columns
-  norb = np.count_nonzero([c.startswith('obdm_up_0') for c in cols])
   nparams = np.count_nonzero([c.startswith('dpenergy') for c in cols])
   nsamples = len(df[cols[0]])
   names = [c for c in cols if not c.startswith('dp')]
@@ -269,7 +268,7 @@ def bootstrap(df, nresamples):
     rsmeans = df.sample(n=nsamples, replace=True).mean(axis=0)
     funclist = []
     for col in names:
-      #if col.startswith('dp'): continue
+      if col.startswith('normalization'): continue
       if col=='energy':
         words = [col,'%i']
       else:
@@ -320,6 +319,20 @@ def compute_and_save(fnames, save_name='saved_data.csv'):
   df.to_csv(save_name)
   return df
 
+def compute_and_save_table(fnames, save_name='table_data.csv'):
+  dfs = []
+  for fname in fnames:
+    gsw = get_gsw(fname)
+    blockdf=gather_json_df(fname)
+    mean, std = get_deriv_estimate(blockdf, nbootstrap_samples=100)
+    df = pd.concat([mean,std], axis=1, keys=['val','err']) 
+    df['filename'] = fname
+    df['gsw'] = gsw
+    dfs.append(df)
+  df = pd.concat(dfs)
+  df.to_csv(save_name)
+  return df
+  
 if __name__=='__main__':
   # *.vmc.json files from QWalk output
   fnames = sys.argv[1:]
