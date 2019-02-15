@@ -41,7 +41,7 @@ The goal is to generate a simple model that accurately describes the states in a
 If we suppose a general form for the model Hamiltonian that includes one- and two-body terms, we can write it as
 
 \begin{equation}
-\hat{H} = \sum_i \epsilon_i \hat{n}_i + \sum_{ij} t_{ij} \hat{c}_i^\dagger \hat{c}_j + \sum_{ijkl} V_{ijkl} \hat{c}_i^\dagger \hat{c}_j^dagger \hat{c}_k \hat{c}_l.
+\hat{H} = \sum_i \epsilon_i \hat{n}_i + \sum_{ij} t_{ij} \hat{c}_i^\dagger \hat{c}_j + \sum_{ijkl} V_{ijkl} \hat{c}_i^\dagger \hat{c}_j^\dagger \hat{c}_k \hat{c}_l.
 \end{equation}
 
 The operators $\hat{c}_i^\dagger, \hat{c}_i$ are defined on a set of orbitals we are free to choose.
@@ -95,13 +95,13 @@ This means two things:
 %We simulate the conventional unit cell (diamond structure) with 8 Si atoms (16 up electrons, 16 down).
 DFT was run in PySCF using the PBE xc-functional and BFD pseudopotentials.
 The BFD basis set was used with exponents less than $0.1$ removed.
-Kohn-Sham orbitals were computed at the gamma point (which includes the X point of the primitive cell).
+Kohn-Sham orbitals were computed at the gamma point of the conventional (which includes the X point of the primitive cell).
 There are 16 occupied orbitals in the lowest energy mean-field wave function.
 
 
 \section {Sampling states}
 
-To fit the model in Eq \ref{eq:bandgapmodel}, we compute the energy $E$ and CB occupation $n_c$ for many sample wave functions.
+To fit the model in Eq \ref{eq:bandgapmodel}, we compute the energy $E$ and CB occupation $n_c$ in QMC for many sample wave functions.
 DMC calculations require the fixed-node approximation, which finds the lowest energy state consistent with the nodal structure of the trial function.
 This works to our advantage when fitting low-energy models: we can sample different excitations by selecting trial functions with different nodes. 
 The trial functions are linear combinations of Slater determinants,
