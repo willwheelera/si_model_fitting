@@ -6,13 +6,17 @@ import time
 import json
 import multiprocessing as mp
 
-def gather_block(blockstr):
+def gather_block(blockstr, cutoff_index=1):
   blockdict={ 'energy':[], 'dpenergy':[], 'dpwf':[], }
   block = json.loads(blockstr.replace("inf","0").replace("nan","0"))['properties']
-  derivdm = block['derivative_dm'][1] # second cutoff 
   blockdict['energy'] = block['total_energy']['value'][0]
-  blockdict['dpenergy'] = derivdm['dpenergy']['vals']
-  blockdict['dpwf'] = derivdm['dpwf']['vals']
+  derivs = 'derivative_dm' in block
+  if derivs:
+    derivdm = block['derivative_dm'][cutoff_index] # second cutoff 
+    blockdict['dpenergy'] = derivdm['dpenergy']['vals']
+    blockdict['dpwf'] = derivdm['dpwf']['vals']
+  else:
+    derivdm = block
 
   if not 'tbdm' in derivdm:
     return blockdict
@@ -23,16 +27,18 @@ def gather_block(blockstr):
   if has_obdm: 
     for s in ['up','down']:
       blockdict['obdm_%s'%s] = derivdm['tbdm']['obdm'][s]
-      dprdmlist = [dprdm['tbdm']['obdm'][s] for dprdm in derivdm['dprdm']]
-      blockdict['dpobdm_%s'%s] = dprdmlist 
-      states = derivdm['tbdm']['states']
+      if derivs:
+        dprdmlist = [dprdm['tbdm']['obdm'][s] for dprdm in derivdm['dprdm']]
+        blockdict['dpobdm_%s'%s] = dprdmlist 
 
   has_tbdm = 'tbdm' in derivdm['tbdm']
   if has_tbdm:
     for s in ['upup','updown','downup','downdown']:
       blockdict['tbdm_%s'%s] = derivdm['tbdm']['tbdm'][s]
-      dprdmlist = [dprdm['tbdm']['tbdm'][s] for dprdm in derivdm['dprdm']]
-      blockdict['dptbdm_%s'%s] = dprdmlist 
+      if derivs:
+        dprdmlist = [dprdm['tbdm']['tbdm'][s] for dprdm in derivdm['dprdm']]
+        blockdict['dptbdm_%s'%s] = dprdmlist 
+
   return blockdict
 
 def gather_json_df(jsonfn, leave_as_matrices=False, parallel=False):
@@ -44,15 +50,13 @@ def gather_json_df(jsonfn, leave_as_matrices=False, parallel=False):
   '''
   start = time.time()
   print('started', jsonfn, time.time()-start)
-  blockdict={ 'energy':[], 'dpenergy':[], 'dpwf':[], }
-  obdmdict={ 'obdm_up':[], 'obdm_down':[], 'dpobdm_up':[], 'dpobdm_down':[], 'normalization':[], }
-  tbdmdict={ 'tbdm_upup':[], 'tbdm_updown':[], 'tbdm_downup':[], 'tbdm_downdown':[],
-             'dptbdm_upup':[], 'dptbdm_updown':[], 'dptbdm_downup':[], 'dptbdm_downdown':[], }
-  states = None
   with open(jsonfn) as jsonf:
     blockstr_list = jsonf.read().split("<RS>")[:-1]
   first_block = json.loads(blockstr_list[0].replace("inf","0").replace("nan","0"))['properties']
-  states = first_block['derivative_dm'][0]['tbdm']['states']
+  if 'derivative_dm' in first_block:
+    states = first_block['derivative_dm'][0]['tbdm']['states']
+  else:
+    states = first_block['tbdm']['states']
 
   print('Loading blocks...')
   if parallel:
