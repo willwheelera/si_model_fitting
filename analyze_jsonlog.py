@@ -209,16 +209,16 @@ def opt_block(df):
   print('ndata',ndata, time.time()-start)
   statslist = []
   while(newdf.shape[0]>1):
+    n = newdf.shape[0]
     serr = newdf.sem(axis=0).values
     serrerr = serr/(2*(newdf.shape[0]-1))**.5
-    statslist.append((iblock, serr.copy()))
+    statslist.append((iblock, n, serr.copy()))
 
-    n = newdf.shape[0]
-    print(iblock, n, time.time()-start)
+    print(iblock, n, 'serr=',serr[0],'see=',serrerr[0],'time=',time.time()-start)
     lasteven = n - int(n%2==1)
     newdf = (newdf[:lasteven:2]+newdf[1::2].values)/2
     iblock += 1
-  for iblock, serr in reversed(statslist):
+  for iblock, n, serr in reversed(statslist):
     B3 = 2**(3*iblock)
     inds = np.where(B3 >= 2*ndata*(serr/serr0)**4)[0]
     optimal_block[inds] = iblock
@@ -592,14 +592,14 @@ if __name__=='__main__':
   words.insert(-1,'pandas')
   name = '.'.join(words)
   start = time.time()
-  print('started')
+  print('started: finding optimal block')
   
   ## gather
   df = gather_json_df(fname)
   print('json gathered', time.time()-start)
   #df.to_json(name)
-  words[-1] = 'hdf'
-  df.to_hdf('.'.join(words), 'data')
+  #words[-1] = 'hdf'
+  #df.to_hdf('.'.join(words), 'data')
   
   # opt_block
   #df = pd.read_json(name)
@@ -608,6 +608,9 @@ if __name__=='__main__':
   opt = opt_block(df)
   print(np.amin(opt), np.amax(opt))
   print(np.unique(opt, return_counts=True))
+
+  print('==4\n',df.columns[opt==4].values[:,np.newaxis])
+  print('==5\n',df.columns[opt==5].values[:,np.newaxis])
 
   #savename = os.path.commonprefix(fnames)
   #if savename[-1]!='.':
