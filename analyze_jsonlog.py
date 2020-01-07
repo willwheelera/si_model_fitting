@@ -6,17 +6,30 @@ import time
 import json
 import multiprocessing as mp
 
-def gather_block(blockstr, cutoff_index=1):
-  blockdict={ 'energy':[], 'dpenergy':[], 'dpwf':[], }
+def gather_block(blockstr, cutoff_index=1, want_derivs=True):
+  """
+  Args:
+    blockstr: string from QWalk's json output
+    cutoff_index: int, indexing the derivative cutoff
+      in `derivative_dm`, which section to read from, each corresponds to a different cutoff
+    want_derivs: boolean
+      if the blockstr has `derivative_dm` and want_derivs is False, the derivatives will not be added to blockdict
+  Returns:
+    blockdict: dict containing the relevant data from blockstr
+  """
+  blockdict={}
   block = json.loads(blockstr.replace("inf","0").replace("nan","0"))['properties']
   blockdict['energy'] = block['total_energy']['value'][0]
   derivs = 'derivative_dm' in block
   if derivs:
     derivdm = block['derivative_dm'][cutoff_index] # second cutoff 
-    blockdict['dpenergy'] = derivdm['dpenergy']['vals']
-    blockdict['dpwf'] = derivdm['dpwf']['vals']
+    derivs=want_derivs #don't want derivs from some calculations
   else:
     derivdm = block
+
+  if derivs:
+    blockdict['dpenergy'] = derivdm['dpenergy']['vals']
+    blockdict['dpwf'] = derivdm['dpwf']['vals']
 
   if not 'tbdm' in derivdm:
     return blockdict
@@ -55,32 +68,32 @@ def gather_json_df(jsonfn, leave_as_matrices=False, parallel=False):
   first_block = json.loads(blockstr_list[0].replace("inf","0").replace("nan","0"))['properties']
   if 'derivative_dm' in first_block:
     states = first_block['derivative_dm'][0]['tbdm']['states']
-  else:
+  elif 'tbdm' in first_block:
     states = first_block['tbdm']['states']
 
-  print('Loading blocks...')
+  #print('Loading blocks...')
   if parallel:
     with mp.Pool(4) as pool:
       print('gather pool opened', time.time()-start)
       result = pool.map_async(gather_block, blockstr_list, chunksize=20)
       for t in range(1000):
         if result.ready(): break
-        print('chunks left', result._number_left, time.time()-start); sys.stdout.flush()
+        print('chunks left', result._number_left, time.time()-start, flush=True)
         result.wait(5)
     blockdicts = result.get()
   else:
     blockdicts = list(map(gather_block, blockstr_list))
   #for i,blockstr in enumerate(blockstr_list):
-  #print('dict loaded from jsons', time.time()-start); sys.stdout.flush()  
+  #print('dict loaded from jsons', time.time()-start, flush=True)  
   #if has_obdm:
   #  blockdict.update(obdmdict)
   #if has_tbdm:
   #  blockdict.update(tbdmdict)
   blockdf = pd.DataFrame(blockdicts)
-  print('converted to DataFrame', time.time()-start); sys.stdout.flush()  
+  #print('converted to DataFrame', time.time()-start, flush=True)  
   if not leave_as_matrices:
     blockdf=flatten_matrices(blockdf, states)
-  print('unpacked matrices', time.time()-start); sys.stdout.flush()  
+  #print('unpacked matrices', time.time()-start, flush=True)  
   return blockdf
 
 def flatten_matrices(blockdf,states):
@@ -99,7 +112,10 @@ def flatten_matrices(blockdf,states):
     if key in ['energy', 'states']: 
       print('skipping', key)
       continue
-    flat=np.stack(blockdf[key],axis=0) 
+    try:
+      flat=np.stack(blockdf[key],axis=0) 
+    except ValueError:
+      print(key,'shapes',*[str(np.shape(b)) for b in blockdf[key]])
     meshinds = np.meshgrid(*list(map(np.arange,flat.shape[1:])), indexing='ij')
     if states is not None and ('bdm' in key or key=='normalization'):
       states = np.array(states)
@@ -277,22 +293,25 @@ def symmetrize_obdm(blockdf):
   norb = len(states)
   print('orbs',norb,'params',nparams) 
   print(blockdf.shape)
+  hasderivs = nparams>0
 
-  print('starting ij+ji combination', time.time()-start); sys.stdout.flush()
+  print('starting ij+ji combination', time.time()-start, flush=True)
 
   for o1 in range(norb):
     for o2 in range(o1):
       for spin in ['up','down']:
         blockdf['obdm_{0}_{1}_{2}'.format(spin,states[o1],states[o2])] += \
             blockdf['obdm_{0}_{2}_{1}'.format(spin,states[o1],states[o2])] 
-        for p in range(nparams):
-          blockdf['dpobdm_{0}_{1}_{2}_{3}'.format(spin,p,states[o1],states[o2])] += \
-              blockdf['dpobdm_{0}_{1}_{3}_{2}'.format(spin,p,states[o1],states[o2])] 
+        if hasderivs:
+          for p in range(nparams):
+            blockdf['dpobdm_{0}_{1}_{2}_{3}'.format(spin,p,states[o1],states[o2])] += \
+                blockdf['dpobdm_{0}_{1}_{3}_{2}'.format(spin,p,states[o1],states[o2])] 
   blockdf.drop(['obdm_{0}_{2}_{1}'.format(spin,states[o1],states[o2]) \
       for spin in ['up','down'] for o1 in range(norb) for o2 in range(o1)], axis=1, inplace=True)
-  blockdf.drop(['dpobdm_{0}_{1}_{3}_{2}'.format(spin,p,states[o1],states[o2]) \
-      for spin in ['up','down'] for p in range(nparams) for o1 in range(norb) for o2 in range(o1)], axis=1, inplace=True) 
-  print('symmetrized; newcols', len(blockdf.columns), time.time()-start); sys.stdout.flush()
+  if hasderivs:
+    blockdf.drop(['dpobdm_{0}_{1}_{3}_{2}'.format(spin,p,states[o1],states[o2]) \
+        for spin in ['up','down'] for p in range(nparams) for o1 in range(norb) for o2 in range(o1)], axis=1, inplace=True) 
+  print('symmetrized; newcols', len(blockdf.columns), time.time()-start, flush=True)
   return blockdf
 
 def symmetrize_by_1body_h(blockdf, h):
@@ -324,6 +343,7 @@ def select_degen(df, obdm_degen, spin_degen=True):
   """
   cols = df.columns
   nparams = cols.str.contains('dpenergy').sum()
+  hasderivs = nparams>0
   keepcols = list(cols[cols.str.match('.*energy.*|normalization|dpwf')])
   newdf = df[keepcols]
   
@@ -335,9 +355,10 @@ def select_degen(df, obdm_degen, spin_degen=True):
       for name in names:  
         assert name in cols, "name {0} is not in data: \n{1}".format(name,cols)
       newcols.append((names[0], df[names].sum(axis=1)))
-      for p in range(nparams):
-        dpnames = [dpn%p for dpn in dpnames_i]
-        newcols.append((dpnames[0], df[dpnames].sum(axis=1).values)) 
+      if hasderivs:
+        for p in range(nparams):
+          dpnames = [dpn%p for dpn in dpnames_i]
+          newcols.append((dpnames[0], df[dpnames].sum(axis=1).values)) 
   else:
     for odlist in obdm_degen:
       for s in ['up','down']:
@@ -346,9 +367,10 @@ def select_degen(df, obdm_degen, spin_degen=True):
         for name in names:  
           assert name in cols, "name {0} is not in data: \n{1}".format(name,cols)
         newcols.append((names[0], df[names].sum(axis=1)))
-        for p in range(nparams):
-          dpnames = [dpn%p for dpn in dpnames_i]
-          newcols.append((dpnames[0], df[dpnames].sum(axis=1).values)) 
+        if hasderivs:
+          for p in range(nparams):
+            dpnames = [dpn%p for dpn in dpnames_i]
+            newcols.append((dpnames[0], df[dpnames].sum(axis=1).values)) 
   newdf = pd.concat([df[keepcols], pd.DataFrame(dict(newcols))], axis=1)
   return newdf
 
@@ -429,30 +451,30 @@ def bootstrap(df, nresamples, obdm_degen=None):
       else: raise StopIteration
 
   with mp.Pool() as pool:
-    print('resample pool opened', time.time()-start); sys.stdout.flush()
+    print('resample pool opened', time.time()-start, flush=True)
     result = pool.starmap_async(resample, myiter(), chunksize=4)
     for t in range(10000):
       if result.ready(): break
-      print('chunks left', result._number_left, time.time()-start); sys.stdout.flush()
+      print('chunks left', result._number_left, time.time()-start, flush=True)
       result.wait(5)
   resamples = result.get()
   
-  print('collecting resamples', time.time()-start); sys.stdout.flush()
+  print('collecting resamples', time.time()-start, flush=True)
   rsdf = pd.concat(resamples, axis=0)
-  print('resamples', rsdf.shape, time.time()-start); sys.stdout.flush()
+  print('resamples', rsdf.shape, time.time()-start, flush=True)
   return rsdf 
 
 def get_deriv_estimate(blockdf, nbootstrap_samples=100, nreblock=2, obdm_degen=None, save_reblock_file=None):
   start = time.time()
-  print('get_deriv_estimate started', time.time()-start); sys.stdout.flush()
+  print('get_deriv_estimate started', time.time()-start, flush=True)
   symmetrize_obdm(blockdf) 
-  print('symmetrized', time.time()-start); sys.stdout.flush()
+  print('symmetrized', time.time()-start, flush=True)
   blockdf = reblock(blockdf, nreblock) 
-  print('reblocked', time.time()-start); sys.stdout.flush()
+  print('reblocked', time.time()-start, flush=True)
   if save_reblock_file is not None:
     blockdf.to_hdf(save_reblock_file, 'data')
   rsdf = bootstrap(blockdf, nbootstrap_samples, obdm_degen=obdm_degen)
-  print('bootstrapped', time.time()-start); sys.stdout.flush()
+  print('bootstrapped', time.time()-start, flush=True)
   return rsdf.mean(), rsdf.std()
 
 def get_gsw(fname):
@@ -520,11 +542,11 @@ def extract_bootstrap_df(bootdf, diag_only=True, parallel=False):
     print('collected energy, len', len(newd['energy']), time.time()-start)
     if parallel:
       with mp.Pool() as pool:
-        print('extract_descriptor_matrix pool opened', time.time()-start); sys.stdout.flush()
+        print('extract_descriptor_matrix pool opened', time.time()-start, flush=True)
         result = pool.starmap_async(helper_select, myiter(obdm_strs), chunksize=4)
         for t in range(10000):
           if result.ready(): break
-          print('chunks left', result._number_left, time.time()-start); sys.stdout.flush()
+          print('chunks left', result._number_left, time.time()-start, flush=True)
           result.wait(5)
       newd.update( dict(result.get()) )
     else:
